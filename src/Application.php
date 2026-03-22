@@ -53,7 +53,8 @@ class Application extends BaseApplication  implements AuthenticationServiceProvi
     public function bootstrap(): void
     {
         // Call parent to load bootstrap from files.
-        parent::bootstrap();
+	parent::bootstrap();
+	$this->addPlugin(\Authentication\Plugin::class); // load plugin
 
         if (PHP_SAPI === 'cli') {
             $this->bootstrapCli();
@@ -141,7 +142,7 @@ class Application extends BaseApplication  implements AuthenticationServiceProvi
 
         $this->addPlugin('Migrations');
 
-        $this->addPlugin('Authentication');
+        //$this->addPlugin('Authentication');
 
         // Load more plugins here
     }
@@ -161,7 +162,7 @@ public function getAuthenticationService(ServerRequestInterface $request): Authe
         'unauthenticatedRedirect' => [
                 'prefix' => false,
                 'plugin' => false,
-                'controller' => 'Users',
+                'controller' => 'Auth',
                 'action' => 'login',
         ],
         'queryParam' => 'redirect',
@@ -188,7 +189,7 @@ public function getAuthenticationService(ServerRequestInterface $request): Authe
         'loginUrl' => Router::url([
             'prefix' => false,
             'plugin' => null,
-            'controller' => 'Users',
+            'controller' => 'Auth',
             'action' => 'login',
         ]),
     ]);

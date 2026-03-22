@@ -19,12 +19,26 @@ class BookingsController extends AppController
      *
      * @return \Cake\Http\Response|null|void Renders view
      */
-    public function index()
+    public function indexall()
     {
         $query = $this->Bookings->find()->order(['bookingdate'=>'DESC']);
         $bookings = $this->paginate($query);
 
         $this->set(compact('bookings'));
+    }
+
+    public function index() {
+        $suche = $this->request->getQuery('table_search');
+        if (!is_null($suche) && $suche !== "") {
+            $query = $this->Bookings->find()
+                ->where(['OR'=>['Bookings.bookingpsp like '=> "%${suche}%", 'Bookings.description like'=>"%${suche}%"]])->order(['Bookings.bookingdate'=> "DESC"]);
+        } else {
+ 	    $query = $this->Bookings->find()
+	        ->order(['Bookings.bookingdate'=>'DESC']);
+        }
+        $this->set('suche', $suche);
+	$bookings = $this->paginate($query);
+        $this->set(compact('bookings'));	
     }
 
     /**

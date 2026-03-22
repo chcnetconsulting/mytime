@@ -8,6 +8,20 @@
     <?= $this->Html->link(__('New Booking'), ['action' => 'add'], ['class' => 'button float-right']) ?>
     <h3><?= __('Bookings') ?></h3>
     <div class="table-responsive">
+
+	<div>
+		 <?php echo $this->Form->create(null, ['action' => $this->Url->build(), 'method' => 'get', 'role' => 'form']); ?>
+                        <div class="input-group input-group-sm" style="width: 150px;">
+                            <input type="text" name="table_search" class="form-control pull-right"
+                                placeholder="<?php echo __('Search'); ?>">
+
+                            <div class="input-group-btn">
+                                <button type="submit" class="btn">Go!</button>
+                            </div>
+                        </div>
+                 </form>
+
+	</div>	
         <table>
             <thead>
                 <tr>
