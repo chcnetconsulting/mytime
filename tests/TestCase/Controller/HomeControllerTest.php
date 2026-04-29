@@ -3,7 +3,6 @@ declare(strict_types=1);
 
 namespace App\Test\TestCase\Controller;
 
-use App\Controller\HomeController;
 use Cake\TestSuite\IntegrationTestTrait;
 use Cake\TestSuite\TestCase;
 
@@ -22,7 +21,7 @@ class HomeControllerTest extends TestCase
      * @var list<string>
      */
     protected array $fixtures = [
-        'app.Home',
+        'app.Bookings',
     ];
 
     /**
@@ -33,50 +32,12 @@ class HomeControllerTest extends TestCase
      */
     public function testIndex(): void
     {
-        $this->markTestIncomplete('Not implemented yet.');
-    }
+        $this->get('/home');
 
-    /**
-     * Test view method
-     *
-     * @return void
-     * @link \App\Controller\HomeController::view()
-     */
-    public function testView(): void
-    {
-        $this->markTestIncomplete('Not implemented yet.');
-    }
-
-    /**
-     * Test add method
-     *
-     * @return void
-     * @link \App\Controller\HomeController::add()
-     */
-    public function testAdd(): void
-    {
-        $this->markTestIncomplete('Not implemented yet.');
-    }
-
-    /**
-     * Test edit method
-     *
-     * @return void
-     * @link \App\Controller\HomeController::edit()
-     */
-    public function testEdit(): void
-    {
-        $this->markTestIncomplete('Not implemented yet.');
-    }
-
-    /**
-     * Test delete method
-     *
-     * @return void
-     * @link \App\Controller\HomeController::delete()
-     */
-    public function testDelete(): void
-    {
-        $this->markTestIncomplete('Not implemented yet.');
+        $this->assertResponseOk();
+        $this->assertResponseContains('Download Buchungen 9 2025');
+        $this->assertResponseContains('150 Minuten');
+        $this->assertResponseContains('2.5 Stunden');
+        $this->assertResponseContains('Download Buchungen 8 2025');
     }
 }

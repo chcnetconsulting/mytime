@@ -24,6 +24,7 @@ class BookingsTableTest extends TestCase
      * @var list<string>
      */
     protected array $fixtures = [
+        'app.Mandanten',
         'app.Bookings',
     ];
 
@@ -59,6 +60,48 @@ class BookingsTableTest extends TestCase
      */
     public function testValidationDefault(): void
     {
-        $this->markTestIncomplete('Not implemented yet.');
+        $valid = $this->Bookings->newEntity([
+            'bookingdate' => '2025-10-01',
+            'mandant_id' => 1,
+            'ticket' => 'MYT-4',
+            'bookingpsp' => 'PSP-NEW',
+            'description' => 'New feature work',
+            'minutes' => 45,
+            'kunde' => 'ACME',
+        ]);
+        $this->assertEmpty($valid->getErrors());
+
+        $invalid = $this->Bookings->newEntity([
+            'bookingdate' => '',
+            'mandant_id' => '',
+            'ticket' => '',
+            'bookingpsp' => '',
+            'description' => '',
+            'minutes' => 'not-a-number',
+            'kunde' => '',
+        ]);
+        $this->assertNotEmpty($invalid->getError('bookingdate'));
+        $this->assertNotEmpty($invalid->getError('mandant_id'));
+        $this->assertNotEmpty($invalid->getError('ticket'));
+        $this->assertNotEmpty($invalid->getError('bookingpsp'));
+        $this->assertNotEmpty($invalid->getError('description'));
+        $this->assertNotEmpty($invalid->getError('minutes'));
+        $this->assertNotEmpty($invalid->getError('kunde'));
+    }
+
+    public function testMandantMustExist(): void
+    {
+        $booking = $this->Bookings->newEntity([
+            'bookingdate' => '2025-10-01',
+            'mandant_id' => 999,
+            'ticket' => 'MYT-4',
+            'bookingpsp' => 'PSP-NEW',
+            'description' => 'New feature work',
+            'minutes' => 45,
+            'kunde' => 'Missing',
+        ]);
+
+        $this->assertFalse($this->Bookings->save($booking));
+        $this->assertNotEmpty($booking->getError('mandant_id'));
     }
 }

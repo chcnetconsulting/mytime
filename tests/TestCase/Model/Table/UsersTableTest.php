@@ -59,7 +59,20 @@ class UsersTableTest extends TestCase
      */
     public function testValidationDefault(): void
     {
-        $this->markTestIncomplete('Not implemented yet.');
+        $valid = $this->Users->newEntity([
+            'username' => 'newuser',
+            'email' => 'new@example.com',
+            'first_name' => 'New',
+            'last_name' => 'User',
+        ]);
+        $this->assertEmpty($valid->getErrors());
+
+        $invalid = $this->Users->newEntity([
+            'username' => '',
+            'email' => 'not-an-email',
+        ]);
+        $this->assertNotEmpty($invalid->getError('username'));
+        $this->assertNotEmpty($invalid->getError('email'));
     }
 
     /**
@@ -70,6 +83,20 @@ class UsersTableTest extends TestCase
      */
     public function testBuildRules(): void
     {
-        $this->markTestIncomplete('Not implemented yet.');
+        $duplicate = $this->Users->newEntity([
+            'username' => 'testuser',
+            'email' => 'other@example.com',
+        ]);
+
+        $this->assertFalse($this->Users->save($duplicate));
+        $this->assertNotEmpty($duplicate->getError('username'));
+
+        $duplicateEmail = $this->Users->newEntity([
+            'username' => 'otheruser',
+            'email' => 'test@example.com',
+        ]);
+
+        $this->assertFalse($this->Users->save($duplicateEmail));
+        $this->assertNotEmpty($duplicateEmail->getError('email'));
     }
 }

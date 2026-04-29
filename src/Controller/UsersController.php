@@ -11,28 +11,6 @@ namespace App\Controller;
 class UsersController extends AppController
 {
     /**
-     * Initialize controller
-     *
-     * @return void
-     */
-    public function initialize(): void
-    {
-        parent::initialize();
-
-        $this->Authentication->allowUnauthenticated(['login']);
-    }
-
-public function beforeFilter(\Cake\Event\EventInterface $event): void
-{
-    parent::beforeFilter($event);
-    // Configure the login action to not require authentication, preventing
-    // the infinite redirect loop issue
-    $this->Authentication->addUnauthenticatedActions(['login', 'add']);
-}
-
-
-
-    /**
      * Index method
      *
      * @return \Cake\Http\Response|null|void Renders view
@@ -120,37 +98,4 @@ public function beforeFilter(\Cake\Event\EventInterface $event): void
         return $this->redirect(['action' => 'index']);
     }
 
-    /**
-     * Login method
-     *
-     * @return \Cake\Http\Response|null|void Redirects on successful login, renders view otherwise.
-     */
-    public function login()
-    {
-        $this->request->allowMethod(['get', 'post']);
-        $result = $this->Authentication->getResult();
-        if ($result->isValid()) {
-            $this->Flash->success(__('Login successful'));
-            $redirect = $this->Authentication->getLoginRedirect();
-            if ($redirect) {
-                return $this->redirect($redirect);
-            }
-        }
-
-        // Display error if user submitted and authentication failed
-        if ($this->request->is('post')) {
-            $this->Flash->error(__('Invalid username or password'));
-        }
-    }
-
-public function logout()
-{
-    $result = $this->Authentication->getResult();
-    // regardless of POST or GET, redirect if user is logged in
-    if ($result && $result->isValid()) {
-        $this->Authentication->logout();
-
-        return $this->redirect(['controller' => 'Users', 'action' => 'login']);
-    }
-}
 }

@@ -16,7 +16,9 @@ declare(strict_types=1);
  */
 namespace App\Controller;
 
+use Cake\Core\Configure;
 use Cake\Controller\Controller;
+use Cake\Event\EventInterface;
 
 /**
  * Application Controller
@@ -28,14 +30,6 @@ use Cake\Controller\Controller;
  */
 class AppController extends Controller
 {
-public function beforeFilter(\Cake\Event\EventInterface $event): void
-{
-    parent::beforeFilter($event);
-    // for all controllers in our application, make index and view
-    // actions public, skipping the authentication check
-//    $this->Authentication->addUnauthenticatedActions(['index', 'view']);
-}    
-
 	/**
      * Initialization hook method.
      *
@@ -48,7 +42,6 @@ public function beforeFilter(\Cake\Event\EventInterface $event): void
     public function initialize(): void
     {
         parent::initialize();
-        $this->loadComponent('Authentication.Authentication');
 
         $this->loadComponent('Flash');
 
@@ -57,5 +50,26 @@ public function beforeFilter(\Cake\Event\EventInterface $event): void
          * see https://book.cakephp.org/4/en/controllers/components/form-protection.html
          */
         //$this->loadComponent('FormProtection');
+    }
+
+    public function beforeFilter(EventInterface $event)
+    {
+        parent::beforeFilter($event);
+
+        if (Configure::read('Auth.disabled')) {
+            return null;
+        }
+
+        if ($this->request->getParam('controller') === 'Auth') {
+            return null;
+        }
+
+        if ($this->request->getSession()->check('Auth.User')) {
+            return null;
+        }
+
+        $event->setResult($this->redirect(['controller' => 'Auth', 'action' => 'login']));
+
+        return null;
     }
 }

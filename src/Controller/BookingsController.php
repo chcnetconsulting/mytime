@@ -2,10 +2,10 @@
 declare(strict_types=1);
 
 namespace App\Controller;
+
+use Cake\Http\Exception\BadRequestException;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
-use PhpOffice\PhpSpreadsheet\Style\Border;
-use PhpOffice\PhpSpreadsheet\Style\Color;
 
 /**
  * Bookings Controller
@@ -19,12 +19,35 @@ class BookingsController extends AppController
      *
      * @return \Cake\Http\Response|null|void Renders view
      */
-    public function index()
+    public function indexall()
     {
-        $query = $this->Bookings->find()->order(['bookingdate'=>'DESC']);
+        $query = $this->Bookings->find()->orderBy(['bookingdate' => 'DESC']);
         $bookings = $this->paginate($query);
 
         $this->set(compact('bookings'));
+    }
+
+    public function index() {
+        $suche = $this->request->getQuery('table_search');
+        if (!is_null($suche) && $suche !== "") {
+            $query = $this->Bookings->find()
+                ->contain(['Mandanten'])
+                ->leftJoinWith('Mandanten')
+                ->where([
+                    'OR' => [
+                        'Bookings.bookingpsp like ' => "%{$suche}%",
+                        'Bookings.description like' => "%{$suche}%",
+                        'Mandanten.name like' => "%{$suche}%",
+                    ],
+                ])->orderBy(['Bookings.bookingdate' => 'DESC']);
+        } else {
+ 	    $query = $this->Bookings->find()
+                ->contain(['Mandanten'])
+	        ->orderBy(['Bookings.bookingdate' => 'DESC']);
+        }
+        $this->set('suche', $suche);
+	$bookings = $this->paginate($query);
+        $this->set(compact('bookings'));	
     }
 
     /**
@@ -36,7 +59,7 @@ class BookingsController extends AppController
      */
     public function view($id = null)
     {
-        $booking = $this->Bookings->get($id, contain: []);
+        $booking = $this->Bookings->get($id, contain: ['Mandanten']);
         $this->set(compact('booking'));
     }
 
@@ -49,6 +72,7 @@ class BookingsController extends AppController
     {
 	$booking = $this->Bookings->newEmptyEntity();
 	$psps = $this->Bookings->find()->select(['bookingpsp'])->groupBy(['bookingpsp'])->all();
+        $mandanten = $this->Bookings->Mandanten->find('list')->orderBy(['name' => 'ASC'])->all();
         if ($this->request->is('post')) {
             $booking = $this->Bookings->patchEntity($booking, $this->request->getData());
             if ($this->Bookings->save($booking)) {
@@ -58,7 +82,49 @@ class BookingsController extends AppController
             }
             $this->Flash->error(__('The booking could not be saved. Please, try again.'));
         }
-        $this->set(compact('booking','psps'));
+        $this->set(compact('booking','psps', 'mandanten'));
+    }
+
+    public function ticketLookup()
+    {
+        $ticket = trim((string)$this->request->getQuery('ticket', ''));
+        if ($ticket === '') {
+            $payload = ['found' => false];
+
+            return $this->response
+                ->withType('application/json')
+                ->withStringBody(json_encode($payload));
+        }
+
+        $booking = $this->Bookings->find()
+            ->where(['ticket' => $ticket])
+            ->orderBy(['bookingdate' => 'DESC', 'id' => 'DESC'])
+            ->first();
+
+        if (!$booking) {
+            $payload = ['found' => false];
+
+            return $this->response
+                ->withType('application/json')
+                ->withStringBody(json_encode($payload));
+        }
+
+        $payload = [
+            'found' => true,
+            'booking' => [
+                'bookingdate' => $booking->bookingdate->i18nFormat('yyyy-MM-dd'),
+                'ticket' => $booking->ticket,
+                'bookingpsp' => $booking->bookingpsp,
+                'mandant_id' => $booking->mandant_id,
+                'description' => $booking->description,
+                'minutes' => $booking->minutes,
+                'kunde' => $booking->kunde,
+            ],
+        ];
+
+        return $this->response
+            ->withType('application/json')
+            ->withStringBody(json_encode($payload));
     }
 
     /**
@@ -71,6 +137,8 @@ class BookingsController extends AppController
     public function edit($id = null)
     {
         $booking = $this->Bookings->get($id, contain: []);
+        $psps = $this->Bookings->find()->select(['bookingpsp'])->groupBy(['bookingpsp'])->all();
+        $mandanten = $this->Bookings->Mandanten->find('list')->orderBy(['name' => 'ASC'])->all();
         if ($this->request->is(['patch', 'post', 'put'])) {
             $booking = $this->Bookings->patchEntity($booking, $this->request->getData());
             if ($this->Bookings->save($booking)) {
@@ -80,7 +148,7 @@ class BookingsController extends AppController
             }
             $this->Flash->error(__('The booking could not be saved. Please, try again.'));
         }
-        $this->set(compact('booking'));
+        $this->set(compact('booking', 'psps', 'mandanten'));
     }
 
     /**
@@ -105,6 +173,17 @@ class BookingsController extends AppController
 
     /* Generiert ein excelsheet aus den Daten */
     public function genxls($year, $month) {
+        $year = filter_var($year, FILTER_VALIDATE_INT, [
+            'options' => ['min_range' => 2000, 'max_range' => 2100],
+        ]);
+        $month = filter_var($month, FILTER_VALIDATE_INT, [
+            'options' => ['min_range' => 1, 'max_range' => 12],
+        ]);
+
+        if ($year === false || $month === false) {
+            throw new BadRequestException('Invalid export period.');
+        }
+
 	$spreadsheet = new Spreadsheet();
 	$activeWorksheet = $spreadsheet->getActiveSheet();
 	$activeWorksheet->setCellValue('A1', 'Date');
@@ -117,9 +196,16 @@ class BookingsController extends AppController
 	$activeWorksheet->getStyle('A1:E1')->getBorders()->getBottom()->setBorderStyle(\PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN);
 		
 
+        $bookingDate = $this->Bookings->aliasField('bookingdate');
+        $dateConditions = function ($exp) use ($bookingDate, $year, $month) {
+            return $exp
+                ->eq("YEAR($bookingDate)", $year)
+                ->eq("MONTH($bookingDate)", $month);
+        };
+
 	$results = $this->Bookings->find()
-			 ->where(["year(bookingdate)=$year and month(bookingdate)=$month"])
-			 ->order(['bookingdate'=>'ASC'])
+			 ->where($dateConditions)
+			 ->orderBy(['bookingdate' => 'ASC'])
 			 ->toArray();
 
     $activeWorksheet->setCellValue('A1', 'Date');
@@ -147,10 +233,10 @@ class BookingsController extends AppController
     $i = $i + 2;
 
     $results = $this->Bookings->find()
-	    ->where(["year(bookingdate)=$year and month(bookingdate)=$month"])
+	    ->where($dateConditions)
             ->select(['bookingpsp','minutes'=>$this->Bookings->query()->func()->sum('minutes')])
 	    ->groupBy(['bookingpsp'])
-            ->order(['bookingdate'=>'ASC'])
+            ->orderBy(['bookingdate' => 'ASC'])
             ->toArray();
 
     $activeWorksheet->setCellValue('B'.$i, 'Booking PSP');

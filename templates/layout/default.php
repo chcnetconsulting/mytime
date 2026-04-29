@@ -43,7 +43,10 @@ $cakeDescription = 'myTIME';
         <div class="top-nav-links">
             <a href="/home">Übersicht</a>
             <a href="/bookings">Buchungen</a>
-            <a href="/users/logout">Logout</a>
+            <a href="/mandanten">Mandanten</a>
+            <?php if ($this->request->getSession()->check('Auth.User')): ?>
+                <?= $this->Form->postLink(__('Logout'), ['controller' => 'Auth', 'action' => 'logout']) ?>
+            <?php endif; ?>
         </div>
     </nav>
     <main class="main">

@@ -29,6 +29,8 @@ require dirname(__DIR__) . '/vendor/autoload.php';
 
 require dirname(__DIR__) . '/config/bootstrap.php';
 
+Configure::write('Auth.disabled', true);
+
 if (empty($_SERVER['HTTP_HOST']) && !Configure::read('App.fullBaseUrl')) {
     Configure::write('App.fullBaseUrl', 'http://localhost');
 }
@@ -46,6 +48,7 @@ ConnectionManager::setConfig('test_debug_kit', [
 ]);
 
 ConnectionManager::alias('test_debug_kit', 'debug_kit');
+ConnectionManager::get('test')->cacheMetadata(false);
 
 // Fixate sessionid early on, as php7.2+
 // does not allow the sessionid to be set after stdout
@@ -57,10 +60,4 @@ session_id('cli');
 // Will rebuild the database if the migration state differs
 // from the migration history in files.
 //
-// If you are not using CakePHP's migrations you can
-// hook into your migration tool of choice here or
-// load schema from a SQL dump file with
-// use Cake\TestSuite\Fixture\SchemaLoader;
-// (new SchemaLoader())->loadSqlFiles('./tests/schema.sql', 'test');
-
 (new Migrator())->run();

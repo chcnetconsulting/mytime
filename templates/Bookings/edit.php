@@ -2,6 +2,7 @@
 /**
  * @var \App\View\AppView $this
  * @var \App\Model\Entity\Booking $booking
+ * @var iterable<\App\Model\Entity\Mandant> $mandanten
  */
 ?>
 <div class="row">
@@ -24,9 +25,29 @@
                 <?php
                     echo $this->Form->control('bookingdate');
                     echo $this->Form->control('ticket');
-                    echo $this->Form->control('bookingpsp');
+                ?>
+                <select id="bookingpsp" name="bookingpsp" class="select2">
+                    <?php
+                    $hasCurrentPsp = false;
+                    foreach ($psps as $psp):
+                        $selected = $psp->bookingpsp === $booking->bookingpsp;
+                        $hasCurrentPsp = $hasCurrentPsp || $selected;
+                    ?>
+                    <option value="<?= h($psp->bookingpsp) ?>" <?= $selected ? 'selected' : '' ?>><?= h($psp->bookingpsp) ?></option>
+                    <?php endforeach; ?>
+                    <?php if ($booking->bookingpsp !== null && !$hasCurrentPsp): ?>
+                    <option value="<?= h($booking->bookingpsp) ?>" selected><?= h($booking->bookingpsp) ?></option>
+                    <?php endif; ?>
+                </select>
+                <?php
                     echo $this->Form->control('description');
                     echo $this->Form->control('minutes');
+                    echo $this->Form->control('mandant_id', [
+                        'options' => $mandanten,
+                        'empty' => true,
+                        'class' => 'select2',
+                        'label' => 'Mandant',
+                    ]);
                     echo $this->Form->control('kunde');
                 ?>
             </fieldset>
@@ -35,3 +56,11 @@
         </div>
     </div>
 </div>
+<script>
+$(document).ready(function () {
+   $("#bookingpsp").select2( {
+  tags: true
+}  );
+   $("#mandant-id").select2();
+});
+</script>

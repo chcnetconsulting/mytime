@@ -31,6 +31,10 @@
                     <td><?= h($booking->kunde) ?></td>
                 </tr>
                 <tr>
+                    <th><?= __('Mandant') ?></th>
+                    <td><?= h($booking->mandant?->name) ?></td>
+                </tr>
+                <tr>
                     <th><?= __('Id') ?></th>
                     <td><?= $this->Number->format($booking->id) ?></td>
                 </tr>

@@ -44,6 +44,10 @@ class BookingsTable extends Table
         $this->setPrimaryKey('id');
 
         $this->addBehavior('Timestamp');
+
+        $this->belongsTo('Mandanten', [
+            'foreignKey' => 'mandant_id',
+        ]);
     }
 
     /**
@@ -85,6 +89,24 @@ class BookingsTable extends Table
             ->maxLength('kunde', 20)
             ->notEmptyString('kunde');
 
+        $validator
+            ->integer('mandant_id')
+            ->notEmptyString('mandant_id');
+
         return $validator;
+    }
+
+    /**
+     * Returns a rules checker object that will be used for validating
+     * application integrity.
+     *
+     * @param \Cake\ORM\RulesChecker $rules The rules object to be modified.
+     * @return \Cake\ORM\RulesChecker
+     */
+    public function buildRules(RulesChecker $rules): RulesChecker
+    {
+        $rules->add($rules->existsIn(['mandant_id'], 'Mandanten'), ['errorField' => 'mandant_id']);
+
+        return $rules;
     }
 }

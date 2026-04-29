@@ -3,7 +3,6 @@ declare(strict_types=1);
 
 namespace App\Test\TestCase\Controller;
 
-use App\Controller\UsersController;
 use Cake\TestSuite\IntegrationTestTrait;
 use Cake\TestSuite\TestCase;
 
@@ -33,7 +32,11 @@ class UsersControllerTest extends TestCase
      */
     public function testIndex(): void
     {
-        $this->markTestIncomplete('Not implemented yet.');
+        $this->get('/users');
+
+        $this->assertResponseOk();
+        $this->assertResponseContains('testuser');
+        $this->assertResponseContains('second@example.com');
     }
 
     /**
@@ -44,7 +47,11 @@ class UsersControllerTest extends TestCase
      */
     public function testView(): void
     {
-        $this->markTestIncomplete('Not implemented yet.');
+        $this->get('/users/view/1');
+
+        $this->assertResponseOk();
+        $this->assertResponseContains('testuser');
+        $this->assertResponseContains('test@example.com');
     }
 
     /**
@@ -55,7 +62,17 @@ class UsersControllerTest extends TestCase
      */
     public function testAdd(): void
     {
-        $this->markTestIncomplete('Not implemented yet.');
+        $this->enableCsrfToken();
+        $this->post('/users/add', [
+            'username' => 'newuser',
+            'email' => 'new@example.com',
+            'first_name' => 'New',
+            'last_name' => 'User',
+        ]);
+
+        $this->assertRedirect(['controller' => 'Users', 'action' => 'index']);
+        $users = $this->getTableLocator()->get('Users');
+        $this->assertSame(1, $users->find()->where(['username' => 'newuser'])->count());
     }
 
     /**
@@ -66,7 +83,18 @@ class UsersControllerTest extends TestCase
      */
     public function testEdit(): void
     {
-        $this->markTestIncomplete('Not implemented yet.');
+        $this->enableCsrfToken();
+        $this->post('/users/edit/1', [
+            'username' => 'updateduser',
+            'email' => 'updated@example.com',
+            'first_name' => 'Updated',
+            'last_name' => 'User',
+        ]);
+
+        $this->assertRedirect(['controller' => 'Users', 'action' => 'index']);
+        $user = $this->getTableLocator()->get('Users')->get(1);
+        $this->assertSame('updateduser', $user->username);
+        $this->assertSame('updated@example.com', $user->email);
     }
 
     /**
@@ -77,17 +105,11 @@ class UsersControllerTest extends TestCase
      */
     public function testDelete(): void
     {
-        $this->markTestIncomplete('Not implemented yet.');
-    }
+        $this->enableCsrfToken();
+        $this->delete('/users/delete/1');
 
-    /**
-     * Test login method
-     *
-     * @return void
-     * @link \App\Controller\UsersController::login()
-     */
-    public function testLogin(): void
-    {
-        $this->markTestIncomplete('Not implemented yet.');
+        $this->assertRedirect(['controller' => 'Users', 'action' => 'index']);
+        $users = $this->getTableLocator()->get('Users');
+        $this->assertFalse($users->exists(['id' => 1]));
     }
 }
