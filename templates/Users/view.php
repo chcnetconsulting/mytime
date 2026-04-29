@@ -27,6 +27,14 @@
                     <td><?= h($user->email) ?></td>
                 </tr>
                 <tr>
+                    <th><?= __('Group') ?></th>
+                    <td><?= h($user->group?->name) ?></td>
+                </tr>
+                <tr>
+                    <th><?= __('Admin') ?></th>
+                    <td><?= $user->is_admin ? __('Yes') : __('No') ?></td>
+                </tr>
+                <tr>
                     <th><?= __('Id') ?></th>
                     <td><?= $this->Number->format($user->id) ?></td>
                 </tr>

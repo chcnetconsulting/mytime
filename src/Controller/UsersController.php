@@ -3,6 +3,10 @@ declare(strict_types=1);
 
 namespace App\Controller;
 
+use Cake\Core\Configure;
+use Cake\Event\EventInterface;
+use Cake\Http\Exception\ForbiddenException;
+
 /**
  * Users Controller
  *
@@ -10,6 +14,21 @@ namespace App\Controller;
  */
 class UsersController extends AppController
 {
+    public function beforeFilter(EventInterface $event)
+    {
+        parent::beforeFilter($event);
+
+        if (Configure::read('Auth.disabled')) {
+            return null;
+        }
+
+        if (!$this->currentUserIsAdmin()) {
+            throw new ForbiddenException('Only admins can manage users.');
+        }
+
+        return null;
+    }
+
     /**
      * Index method
      *
@@ -17,7 +36,7 @@ class UsersController extends AppController
      */
     public function index()
     {
-        $query = $this->Users->find();
+        $query = $this->Users->find()->contain(['Groups']);
         $users = $this->paginate($query);
 
         $this->set(compact('users'));
@@ -32,7 +51,7 @@ class UsersController extends AppController
      */
     public function view($id = null)
     {
-        $user = $this->Users->get($id, contain: []);
+        $user = $this->Users->get($id, contain: ['Groups']);
         $this->set(compact('user'));
     }
 
@@ -44,8 +63,10 @@ class UsersController extends AppController
     public function add()
     {
         $user = $this->Users->newEmptyEntity();
+        $groups = $this->Users->Groups->find('list')->orderBy(['name' => 'ASC'])->all();
         if ($this->request->is('post')) {
-            $user = $this->Users->patchEntity($user, $this->request->getData());
+            $data = $this->userDataWithDefaults($this->request->getData());
+            $user = $this->Users->patchEntity($user, $data);
             if ($this->Users->save($user)) {
                 $this->Flash->success(__('The user has been saved.'));
 
@@ -53,7 +74,7 @@ class UsersController extends AppController
             }
             $this->Flash->error(__('The user could not be saved. Please, try again.'));
         }
-        $this->set(compact('user'));
+        $this->set(compact('user', 'groups'));
     }
 
     /**
@@ -66,8 +87,10 @@ class UsersController extends AppController
     public function edit($id = null)
     {
         $user = $this->Users->get($id, contain: []);
+        $groups = $this->Users->Groups->find('list')->orderBy(['name' => 'ASC'])->all();
         if ($this->request->is(['patch', 'post', 'put'])) {
-            $user = $this->Users->patchEntity($user, $this->request->getData());
+            $data = $this->userDataWithDefaults($this->request->getData());
+            $user = $this->Users->patchEntity($user, $data);
             if ($this->Users->save($user)) {
                 $this->Flash->success(__('The user has been saved.'));
 
@@ -75,7 +98,7 @@ class UsersController extends AppController
             }
             $this->Flash->error(__('The user could not be saved. Please, try again.'));
         }
-        $this->set(compact('user'));
+        $this->set(compact('user', 'groups'));
     }
 
     /**
@@ -96,6 +119,43 @@ class UsersController extends AppController
         }
 
         return $this->redirect(['action' => 'index']);
+    }
+
+    /**
+     * Add safe defaults for optional checkbox data and stale forms.
+     *
+     * @param array<string, mixed> $data Request data.
+     * @return array<string, mixed>
+     */
+    private function userDataWithDefaults(array $data): array
+    {
+        $data += ['is_admin' => false];
+
+        if (empty($data['group_id'])) {
+            $groupId = $this->currentGroupId() ?? $this->defaultGroupId();
+            if ($groupId !== null) {
+                $data['group_id'] = $groupId;
+            }
+        }
+
+        return $data;
+    }
+
+    private function defaultGroupId(): ?int
+    {
+        $group = $this->Users->Groups->find()
+            ->select(['id'])
+            ->where(['name' => 'Default'])
+            ->first();
+
+        if ($group === null) {
+            $group = $this->Users->Groups->find()
+                ->select(['id'])
+                ->orderBy(['id' => 'ASC'])
+                ->first();
+        }
+
+        return empty($group?->id) ? null : (int)$group->id;
     }
 
 }

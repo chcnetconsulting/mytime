@@ -282,14 +282,30 @@ class AuthController extends AppController
         $users = $this->fetchTable('Users');
         $user = $users->find()->where(['email' => $email])->first();
         if ($user) {
+            $ownerEmail = (string)Configure::read('Auth.ownerEmail', '');
+            if ($ownerEmail !== '' && strcasecmp($email, $ownerEmail) === 0 && !$user->is_admin) {
+                $user->is_admin = true;
+                $users->saveOrFail($user);
+            }
+
             return $user;
         }
 
+        $groups = $this->fetchTable('Groups');
+        $group = $groups->find()->where(['name' => 'Default'])->first();
+        if (!$group) {
+            $group = $groups->newEntity(['name' => 'Default']);
+            $group = $groups->saveOrFail($group);
+        }
+
+        $ownerEmail = (string)Configure::read('Auth.ownerEmail', '');
         $name = trim((string)($claims['name'] ?? ''));
         $parts = preg_split('/\s+/', $name, 2) ?: [];
         $user = $users->newEntity([
             'username' => (string)($claims['preferred_username'] ?? $email),
             'email' => $email,
+            'group_id' => $group->id,
+            'is_admin' => $ownerEmail !== '' && strcasecmp($email, $ownerEmail) === 0,
             'first_name' => $parts[0] ?? null,
             'last_name' => $parts[1] ?? null,
         ]);

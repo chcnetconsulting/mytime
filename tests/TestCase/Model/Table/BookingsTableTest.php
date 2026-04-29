@@ -24,6 +24,8 @@ class BookingsTableTest extends TestCase
      * @var list<string>
      */
     protected array $fixtures = [
+        'app.Groups',
+        'app.Users',
         'app.Mandanten',
         'app.Bookings',
     ];
@@ -62,6 +64,8 @@ class BookingsTableTest extends TestCase
     {
         $valid = $this->Bookings->newEntity([
             'bookingdate' => '2025-10-01',
+            'user_id' => 1,
+            'group_id' => 1,
             'mandant_id' => 1,
             'ticket' => 'MYT-4',
             'bookingpsp' => 'PSP-NEW',
@@ -73,6 +77,8 @@ class BookingsTableTest extends TestCase
 
         $invalid = $this->Bookings->newEntity([
             'bookingdate' => '',
+            'user_id' => '',
+            'group_id' => '',
             'mandant_id' => '',
             'ticket' => '',
             'bookingpsp' => '',
@@ -81,6 +87,8 @@ class BookingsTableTest extends TestCase
             'kunde' => '',
         ]);
         $this->assertNotEmpty($invalid->getError('bookingdate'));
+        $this->assertNotEmpty($invalid->getError('user_id'));
+        $this->assertNotEmpty($invalid->getError('group_id'));
         $this->assertNotEmpty($invalid->getError('mandant_id'));
         $this->assertNotEmpty($invalid->getError('ticket'));
         $this->assertNotEmpty($invalid->getError('bookingpsp'));
@@ -93,6 +101,8 @@ class BookingsTableTest extends TestCase
     {
         $booking = $this->Bookings->newEntity([
             'bookingdate' => '2025-10-01',
+            'user_id' => 1,
+            'group_id' => 1,
             'mandant_id' => 999,
             'ticket' => 'MYT-4',
             'bookingpsp' => 'PSP-NEW',
@@ -103,5 +113,41 @@ class BookingsTableTest extends TestCase
 
         $this->assertFalse($this->Bookings->save($booking));
         $this->assertNotEmpty($booking->getError('mandant_id'));
+    }
+
+    public function testUserMustExist(): void
+    {
+        $booking = $this->Bookings->newEntity([
+            'bookingdate' => '2025-10-01',
+            'user_id' => 999,
+            'group_id' => 1,
+            'mandant_id' => 1,
+            'ticket' => 'MYT-4',
+            'bookingpsp' => 'PSP-NEW',
+            'description' => 'New feature work',
+            'minutes' => 45,
+            'kunde' => 'Missing',
+        ]);
+
+        $this->assertFalse($this->Bookings->save($booking));
+        $this->assertNotEmpty($booking->getError('user_id'));
+    }
+
+    public function testGroupMustExist(): void
+    {
+        $booking = $this->Bookings->newEntity([
+            'bookingdate' => '2025-10-01',
+            'user_id' => 1,
+            'group_id' => 999,
+            'mandant_id' => 1,
+            'ticket' => 'MYT-4',
+            'bookingpsp' => 'PSP-NEW',
+            'description' => 'New feature work',
+            'minutes' => 45,
+            'kunde' => 'Missing',
+        ]);
+
+        $this->assertFalse($this->Bookings->save($booking));
+        $this->assertNotEmpty($booking->getError('group_id'));
     }
 }

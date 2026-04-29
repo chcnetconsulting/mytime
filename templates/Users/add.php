@@ -19,6 +19,8 @@
                 <?php
                     echo $this->Form->control('username');
                     echo $this->Form->control('email');
+                    echo $this->Form->control('group_id', ['options' => $groups]);
+                    echo $this->Form->control('is_admin', ['type' => 'checkbox', 'required' => false]);
                 ?>
             </fieldset>
             <?= $this->Form->button(__('Submit')) ?>

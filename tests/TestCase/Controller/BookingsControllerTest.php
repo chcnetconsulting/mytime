@@ -21,9 +21,27 @@ class BookingsControllerTest extends TestCase
      * @var list<string>
      */
     protected array $fixtures = [
+        'app.Groups',
+        'app.Users',
         'app.Mandanten',
         'app.Bookings',
     ];
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->session([
+            'Auth' => [
+                'User' => [
+                    'id' => 1,
+                    'group_id' => 1,
+                    'username' => 'testuser',
+                    'email' => 'test@example.com',
+                ],
+            ],
+        ]);
+    }
 
     /**
      * Test index method
@@ -38,16 +56,38 @@ class BookingsControllerTest extends TestCase
         $this->assertResponseOk();
         $this->assertResponseContains('MYT-2');
         $this->assertResponseContains('Implementation work');
-        $this->assertResponseContains('PSP-OPS');
+        $this->assertResponseNotContains('MYT-3');
+        $this->assertResponseNotContains('PSP-OPS');
     }
 
     public function testIndexSearchFiltersResults(): void
     {
-        $this->get('/bookings?table_search=OPS');
+        $this->get('/bookings?table_search=CORE');
 
         $this->assertResponseOk();
-        $this->assertResponseContains('PSP-OPS');
-        $this->assertResponseNotContains('PSP-CORE');
+        $this->assertResponseContains('PSP-CORE');
+        $this->assertResponseNotContains('PSP-OPS');
+    }
+
+    public function testIndexOnlyShowsCurrentUsersBookings(): void
+    {
+        $this->session([
+            'Auth' => [
+                'User' => [
+                    'id' => 3,
+                    'group_id' => 2,
+                    'username' => 'thirduser',
+                    'email' => 'third@example.com',
+                ],
+            ],
+        ]);
+
+        $this->get('/bookings');
+
+        $this->assertResponseOk();
+        $this->assertResponseContains('MYT-3');
+        $this->assertResponseNotContains('MYT-1');
+        $this->assertResponseNotContains('MYT-2');
     }
 
     /**
@@ -86,7 +126,9 @@ class BookingsControllerTest extends TestCase
 
         $this->assertRedirect(['controller' => 'Bookings', 'action' => 'index']);
         $bookings = $this->getTableLocator()->get('Bookings');
-        $this->assertSame(1, $bookings->find()->where(['ticket' => 'MYT-4'])->count());
+        $booking = $bookings->find()->where(['ticket' => 'MYT-4'])->firstOrFail();
+        $this->assertSame(1, $booking->user_id);
+        $this->assertSame(1, $booking->group_id);
     }
 
     public function testAddIncludesTicketLookupScript(): void
@@ -125,6 +167,36 @@ class BookingsControllerTest extends TestCase
         $this->assertFalse($payload['found']);
     }
 
+    public function testTicketLookupDoesNotUseAnotherUsersBooking(): void
+    {
+        $this->get('/bookings/ticket-lookup?ticket=MYT-3');
+
+        $this->assertResponseOk();
+        $payload = json_decode((string)$this->_response->getBody(), true);
+        $this->assertFalse($payload['found']);
+    }
+
+    public function testUsersInSameGroupCanUseSharedBookings(): void
+    {
+        $this->session([
+            'Auth' => [
+                'User' => [
+                    'id' => 2,
+                    'group_id' => 1,
+                    'username' => 'seconduser',
+                    'email' => 'second@example.com',
+                ],
+            ],
+        ]);
+
+        $this->get('/bookings');
+
+        $this->assertResponseOk();
+        $this->assertResponseContains('MYT-1');
+        $this->assertResponseContains('MYT-2');
+        $this->assertResponseNotContains('MYT-3');
+    }
+
     /**
      * Test edit method
      *
@@ -149,6 +221,26 @@ class BookingsControllerTest extends TestCase
         $this->assertSame('Updated planning session', $booking->description);
         $this->assertSame(75, $booking->minutes);
         $this->assertSame(2, $booking->mandant_id);
+        $this->assertSame(1, $booking->user_id);
+        $this->assertSame(1, $booking->group_id);
+    }
+
+    public function testEditRejectsAnotherUsersBooking(): void
+    {
+        $this->enableCsrfToken();
+        $this->post('/bookings/edit/3', [
+            'bookingdate' => '2025-08-29',
+            'mandant_id' => 1,
+            'ticket' => 'MYT-3',
+            'bookingpsp' => 'PSP-OPS',
+            'description' => 'Should not update',
+            'minutes' => 99,
+            'kunde' => 'ACME',
+        ]);
+
+        $this->assertResponseCode(404);
+        $booking = $this->getTableLocator()->get('Bookings')->get(3);
+        $this->assertSame('Ops review', $booking->description);
     }
 
     /**

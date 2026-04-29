@@ -24,6 +24,7 @@ class UsersTableTest extends TestCase
      * @var list<string>
      */
     protected array $fixtures = [
+        'app.Groups',
         'app.Users',
     ];
 
@@ -62,6 +63,8 @@ class UsersTableTest extends TestCase
         $valid = $this->Users->newEntity([
             'username' => 'newuser',
             'email' => 'new@example.com',
+            'group_id' => 1,
+            'is_admin' => false,
             'first_name' => 'New',
             'last_name' => 'User',
         ]);
@@ -70,9 +73,11 @@ class UsersTableTest extends TestCase
         $invalid = $this->Users->newEntity([
             'username' => '',
             'email' => 'not-an-email',
+            'group_id' => '',
         ]);
         $this->assertNotEmpty($invalid->getError('username'));
         $this->assertNotEmpty($invalid->getError('email'));
+        $this->assertNotEmpty($invalid->getError('group_id'));
     }
 
     /**
@@ -86,6 +91,7 @@ class UsersTableTest extends TestCase
         $duplicate = $this->Users->newEntity([
             'username' => 'testuser',
             'email' => 'other@example.com',
+            'group_id' => 1,
         ]);
 
         $this->assertFalse($this->Users->save($duplicate));
@@ -94,6 +100,7 @@ class UsersTableTest extends TestCase
         $duplicateEmail = $this->Users->newEntity([
             'username' => 'otheruser',
             'email' => 'test@example.com',
+            'group_id' => 1,
         ]);
 
         $this->assertFalse($this->Users->save($duplicateEmail));

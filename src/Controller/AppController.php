@@ -30,6 +30,60 @@ use Cake\Event\EventInterface;
  */
 class AppController extends Controller
 {
+    protected function currentUser(): ?array
+    {
+        $user = $this->request->getSession()->read('Auth.User');
+
+        return is_array($user) ? $user : null;
+    }
+
+    protected function currentUserId(): ?int
+    {
+        $user = $this->currentUser();
+
+        return empty($user['id']) ? null : (int)$user['id'];
+    }
+
+    protected function currentGroupId(): ?int
+    {
+        $userId = $this->currentUserId();
+        if ($userId === null) {
+            return null;
+        }
+
+        $user = $this->fetchTable('Users')->find()
+            ->select(['id', 'group_id'])
+            ->where(['id' => $userId])
+            ->first();
+
+        return empty($user?->group_id) ? null : (int)$user->group_id;
+    }
+
+    protected function currentUserIsAdmin(): bool
+    {
+        $user = $this->currentUser();
+        if (!$user) {
+            return false;
+        }
+
+        $ownerEmail = (string)Configure::read('Auth.ownerEmail', '');
+        if ($ownerEmail !== '' && strcasecmp((string)($user['email'] ?? ''), $ownerEmail) === 0) {
+            return true;
+        }
+
+        $userId = $this->currentUserId();
+        if ($userId === null) {
+            return false;
+        }
+
+        $record = $this->fetchTable('Users')->find()
+            ->select(['id', 'is_admin'])
+            ->where(['id' => $userId])
+            ->first();
+
+        return (bool)($record?->is_admin ?? false);
+    }
+
 	/**
      * Initialization hook method.
      *

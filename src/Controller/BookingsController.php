@@ -14,6 +14,25 @@ use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
  */
 class BookingsController extends AppController
 {
+    private function bookingScopeConditions(): array
+    {
+        $groupId = $this->currentGroupId();
+        if ($groupId !== null) {
+            return ['Bookings.group_id' => $groupId];
+        }
+
+        $userId = parent::currentUserId();
+        if ($userId !== null) {
+            return ['Bookings.user_id' => $userId];
+        }
+
+        if ($this->currentUserIsAdmin()) {
+            return [];
+        }
+
+        return ['Bookings.id IS' => null];
+    }
+
     /**
      * Index method
      *
@@ -21,7 +40,9 @@ class BookingsController extends AppController
      */
     public function indexall()
     {
-        $query = $this->Bookings->find()->orderBy(['bookingdate' => 'DESC']);
+        $query = $this->Bookings->find()
+            ->where($this->bookingScopeConditions())
+            ->orderBy(['bookingdate' => 'DESC']);
         $bookings = $this->paginate($query);
 
         $this->set(compact('bookings'));
@@ -33,6 +54,7 @@ class BookingsController extends AppController
             $query = $this->Bookings->find()
                 ->contain(['Mandanten'])
                 ->leftJoinWith('Mandanten')
+                ->where($this->bookingScopeConditions())
                 ->where([
                     'OR' => [
                         'Bookings.bookingpsp like ' => "%{$suche}%",
@@ -43,6 +65,7 @@ class BookingsController extends AppController
         } else {
  	    $query = $this->Bookings->find()
                 ->contain(['Mandanten'])
+                ->where($this->bookingScopeConditions())
 	        ->orderBy(['Bookings.bookingdate' => 'DESC']);
         }
         $this->set('suche', $suche);
@@ -59,7 +82,11 @@ class BookingsController extends AppController
      */
     public function view($id = null)
     {
-        $booking = $this->Bookings->get($id, contain: ['Mandanten']);
+        $booking = $this->Bookings->find()
+            ->contain(['Mandanten'])
+            ->where($this->bookingScopeConditions())
+            ->where(['Bookings.id' => $id])
+            ->firstOrFail();
         $this->set(compact('booking'));
     }
 
@@ -71,10 +98,16 @@ class BookingsController extends AppController
     public function add()
     {
 	$booking = $this->Bookings->newEmptyEntity();
-	$psps = $this->Bookings->find()->select(['bookingpsp'])->groupBy(['bookingpsp'])->all();
+	$psps = $this->Bookings->find()
+            ->select(['bookingpsp'])
+            ->where($this->bookingScopeConditions())
+            ->groupBy(['bookingpsp'])
+            ->all();
         $mandanten = $this->Bookings->Mandanten->find('list')->orderBy(['name' => 'ASC'])->all();
         if ($this->request->is('post')) {
             $booking = $this->Bookings->patchEntity($booking, $this->request->getData());
+            $booking->user_id = parent::currentUserId();
+            $booking->group_id = $this->currentGroupId();
             if ($this->Bookings->save($booking)) {
                 $this->Flash->success(__('The booking has been saved.'));
 
@@ -97,6 +130,7 @@ class BookingsController extends AppController
         }
 
         $booking = $this->Bookings->find()
+            ->where($this->bookingScopeConditions())
             ->where(['ticket' => $ticket])
             ->orderBy(['bookingdate' => 'DESC', 'id' => 'DESC'])
             ->first();
@@ -136,11 +170,20 @@ class BookingsController extends AppController
      */
     public function edit($id = null)
     {
-        $booking = $this->Bookings->get($id, contain: []);
-        $psps = $this->Bookings->find()->select(['bookingpsp'])->groupBy(['bookingpsp'])->all();
+        $booking = $this->Bookings->find()
+            ->where($this->bookingScopeConditions())
+            ->where(['Bookings.id' => $id])
+            ->firstOrFail();
+        $psps = $this->Bookings->find()
+            ->select(['bookingpsp'])
+            ->where($this->bookingScopeConditions())
+            ->groupBy(['bookingpsp'])
+            ->all();
         $mandanten = $this->Bookings->Mandanten->find('list')->orderBy(['name' => 'ASC'])->all();
         if ($this->request->is(['patch', 'post', 'put'])) {
             $booking = $this->Bookings->patchEntity($booking, $this->request->getData());
+            $booking->user_id = parent::currentUserId();
+            $booking->group_id = $this->currentGroupId();
             if ($this->Bookings->save($booking)) {
                 $this->Flash->success(__('The booking has been saved.'));
 
@@ -161,7 +204,10 @@ class BookingsController extends AppController
     public function delete($id = null)
     {
         $this->request->allowMethod(['post', 'delete']);
-        $booking = $this->Bookings->get($id);
+        $booking = $this->Bookings->find()
+            ->where($this->bookingScopeConditions())
+            ->where(['Bookings.id' => $id])
+            ->firstOrFail();
         if ($this->Bookings->delete($booking)) {
             $this->Flash->success(__('The booking has been deleted.'));
         } else {
@@ -204,6 +250,7 @@ class BookingsController extends AppController
         };
 
 	$results = $this->Bookings->find()
+             ->where($this->bookingScopeConditions())
 			 ->where($dateConditions)
 			 ->orderBy(['bookingdate' => 'ASC'])
 			 ->toArray();
@@ -233,6 +280,7 @@ class BookingsController extends AppController
     $i = $i + 2;
 
     $results = $this->Bookings->find()
+            ->where($this->bookingScopeConditions())
 	    ->where($dateConditions)
             ->select(['bookingpsp','minutes'=>$this->Bookings->query()->func()->sum('minutes')])
 	    ->groupBy(['bookingpsp'])

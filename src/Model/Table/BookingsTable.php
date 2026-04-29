@@ -48,6 +48,12 @@ class BookingsTable extends Table
         $this->belongsTo('Mandanten', [
             'foreignKey' => 'mandant_id',
         ]);
+        $this->belongsTo('Users', [
+            'foreignKey' => 'user_id',
+        ]);
+        $this->belongsTo('Groups', [
+            'foreignKey' => 'group_id',
+        ]);
     }
 
     /**
@@ -93,6 +99,14 @@ class BookingsTable extends Table
             ->integer('mandant_id')
             ->notEmptyString('mandant_id');
 
+        $validator
+            ->integer('user_id')
+            ->notEmptyString('user_id');
+
+        $validator
+            ->integer('group_id')
+            ->notEmptyString('group_id');
+
         return $validator;
     }
 
@@ -106,6 +120,8 @@ class BookingsTable extends Table
     public function buildRules(RulesChecker $rules): RulesChecker
     {
         $rules->add($rules->existsIn(['mandant_id'], 'Mandanten'), ['errorField' => 'mandant_id']);
+        $rules->add($rules->existsIn(['user_id'], 'Users'), ['errorField' => 'user_id']);
+        $rules->add($rules->existsIn(['group_id'], 'Groups'), ['errorField' => 'group_id']);
 
         return $rules;
     }

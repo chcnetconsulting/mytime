@@ -17,6 +17,8 @@ class MandantenControllerTest extends TestCase
      * @var list<string>
      */
     protected array $fixtures = [
+        'app.Groups',
+        'app.Users',
         'app.Mandanten',
         'app.Bookings',
     ];

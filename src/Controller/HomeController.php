@@ -11,6 +11,22 @@ use Cake\ORM\Locator\LocatorAwareTrait;
 class HomeController extends AppController
 {
     use LocatorAwareTrait;
+
+    private function bookingScopeConditions(): array
+    {
+        $groupId = $this->currentGroupId();
+        if ($groupId !== null) {
+            return ['group_id' => $groupId];
+        }
+
+        $userId = $this->currentUserId();
+        if ($userId !== null) {
+            return ['user_id' => $userId];
+        }
+
+        return [];
+    }
+
     /**
      * Index method
      *
@@ -21,6 +37,7 @@ class HomeController extends AppController
         $rows = $this->fetchTable('Bookings')
             ->find()
             ->select(['bookingdate', 'minutes'])
+            ->where($this->bookingScopeConditions())
             ->orderBy(['bookingdate' => 'DESC'])
             ->all();
 

@@ -40,6 +40,13 @@ class UsersTable extends Table
         $this->setTable('users');
         $this->setDisplayField('username');
         $this->setPrimaryKey('id');
+
+        $this->belongsTo('Groups', [
+            'foreignKey' => 'group_id',
+        ]);
+        $this->hasMany('Bookings', [
+            'foreignKey' => 'user_id',
+        ]);
     }
 
     /**
@@ -61,6 +68,13 @@ class UsersTable extends Table
             ->requirePresence('email', 'create')
             ->notEmptyString('email');
 
+        $validator
+            ->integer('group_id')
+            ->notEmptyString('group_id');
+
+        $validator
+            ->boolean('is_admin');
+
         return $validator;
     }
 
@@ -75,6 +89,7 @@ class UsersTable extends Table
     {
         $rules->add($rules->isUnique(['username']), ['errorField' => 'username']);
         $rules->add($rules->isUnique(['email']), ['errorField' => 'email']);
+        $rules->add($rules->existsIn(['group_id'], 'Groups'), ['errorField' => 'group_id']);
 
         return $rules;
     }

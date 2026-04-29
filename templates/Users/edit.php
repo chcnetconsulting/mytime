@@ -2,6 +2,7 @@
 /**
  * @var \App\View\AppView $this
  * @var \App\Model\Entity\User $user
+ * @var iterable<\App\Model\Entity\Group> $groups
  */
 ?>
 <div class="row">
@@ -24,6 +25,8 @@
                 <?php
                     echo $this->Form->control('username');
                     echo $this->Form->control('email');
+                    echo $this->Form->control('group_id', ['options' => $groups]);
+                    echo $this->Form->control('is_admin', ['type' => 'checkbox', 'required' => false]);
                 ?>
             </fieldset>
             <?= $this->Form->button(__('Submit')) ?>

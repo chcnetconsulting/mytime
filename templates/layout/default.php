@@ -44,6 +44,8 @@ $cakeDescription = 'myTIME';
             <a href="/home">Übersicht</a>
             <a href="/bookings">Buchungen</a>
             <a href="/mandanten">Mandanten</a>
+            <a href="/users">Users</a>
+            <a href="/groups">Groups</a>
             <?php if ($this->request->getSession()->check('Auth.User')): ?>
                 <?= $this->Form->postLink(__('Logout'), ['controller' => 'Auth', 'action' => 'logout']) ?>
             <?php endif; ?>

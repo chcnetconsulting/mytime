@@ -9,6 +9,8 @@ use Cake\ORM\Entity;
  * Booking Entity
  *
  * @property int $id
+ * @property int $user_id
+ * @property int $group_id
  * @property int $mandant_id
  * @property \Cake\I18n\Date $bookingdate
  * @property string $ticket
@@ -20,6 +22,8 @@ use Cake\ORM\Entity;
  * @property \Cake\I18n\DateTime $modified
  *
  * @property \App\Model\Entity\Mandant $mandant
+ * @property \App\Model\Entity\User $user
+ * @property \App\Model\Entity\Group $group
  */
 class Booking extends Entity
 {
@@ -34,6 +38,8 @@ class Booking extends Entity
      */
     protected array $_accessible = [
         'bookingdate' => true,
+        'user_id' => true,
+        'group_id' => true,
         'mandant_id' => true,
         'ticket' => true,
         'bookingpsp' => true,
@@ -43,5 +49,7 @@ class Booking extends Entity
         'created' => true,
         'modified' => true,
         'mandant' => true,
+        'user' => true,
+        'group' => true,
     ];
 }

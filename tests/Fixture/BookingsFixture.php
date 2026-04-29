@@ -20,6 +20,8 @@ class BookingsFixture extends TestFixture
         $this->records = [
             [
                 'id' => 1,
+                'user_id' => 1,
+                'group_id' => 1,
                 'mandant_id' => 1,
                 'bookingdate' => '2025-09-02',
                 'ticket' => 'MYT-1',
@@ -32,6 +34,8 @@ class BookingsFixture extends TestFixture
             ],
             [
                 'id' => 2,
+                'user_id' => 1,
+                'group_id' => 1,
                 'mandant_id' => 1,
                 'bookingdate' => '2025-09-03',
                 'ticket' => 'MYT-2',
@@ -44,6 +48,8 @@ class BookingsFixture extends TestFixture
             ],
             [
                 'id' => 3,
+                'user_id' => 3,
+                'group_id' => 2,
                 'mandant_id' => 1,
                 'bookingdate' => '2025-08-29',
                 'ticket' => 'MYT-3',
