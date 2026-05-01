@@ -1,0 +1,12 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: mytime-tls
+  namespace: mytime
+spec:
+  secretName: mytime-tls
+  issuerRef:
+    name: le
+    kind: ClusterIssuer
+  dnsNames:
+    - mytime.example.com

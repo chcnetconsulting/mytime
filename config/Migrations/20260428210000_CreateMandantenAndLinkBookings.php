@@ -36,7 +36,7 @@ class CreateMandantenAndLinkBookings extends BaseMigration
                 ->addColumn('mandant_id', 'integer', [
                     'default' => null,
                     'null' => true,
-                    'signed' => false,
+                    'signed' => true,
                 ])
                 ->addIndex(['mandant_id'])
                 ->update();

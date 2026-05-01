@@ -27,7 +27,7 @@ class AuthController extends AppController
             'response_type' => 'code',
             'redirect_uri' => $config['redirectUri'],
             'response_mode' => 'query',
-            'scope' => 'openid profile email',
+            'scope' => $config['scope'],
             'state' => $state,
             'nonce' => $nonce,
         ]);
@@ -73,7 +73,7 @@ class AuthController extends AppController
         $this->request->getSession()->delete('Auth.User');
         $this->Flash->success(__('You are logged out.'));
 
-        return $this->redirect($this->oidcConfig()['logoutUrl']);
+        return $this->redirect($this->oidcConfig()['logoutUrl'] ?: ['controller' => 'Auth', 'action' => 'login']);
     }
 
     /**
@@ -81,26 +81,64 @@ class AuthController extends AppController
      */
     private function oidcConfig(): array
     {
-        $config = (array)Configure::read('Oidc');
-        foreach (['tenantId', 'clientId', 'clientSecret', 'redirectUri'] as $key) {
+        $oidc = (array)Configure::read('Oidc');
+        $provider = (string)($oidc['provider'] ?? 'entra');
+        $providers = (array)($oidc['providers'] ?? []);
+        if (empty($providers[$provider]) || !is_array($providers[$provider])) {
+            throw new InternalErrorException("Missing OIDC provider configuration: {$provider}");
+        }
+
+        $config = $this->normalizedOidcProviderConfig($provider, (array)$providers[$provider]);
+        foreach (['clientId', 'clientSecret', 'redirectUri', 'issuer', 'authorizeUrl', 'tokenUrl', 'keysUrl'] as $key) {
             if (empty($config[$key])) {
                 throw new InternalErrorException("Missing OIDC configuration: {$key}");
             }
         }
 
-        $tenant = $config['tenantId'];
+        return $config;
+    }
 
-        return [
-            'tenantId' => $tenant,
-            'clientId' => $config['clientId'],
-            'clientSecret' => $config['clientSecret'],
-            'redirectUri' => $config['redirectUri'],
-            'issuer' => "https://login.microsoftonline.com/{$tenant}/v2.0",
-            'authorizeUrl' => "https://login.microsoftonline.com/{$tenant}/oauth2/v2.0/authorize",
-            'tokenUrl' => "https://login.microsoftonline.com/{$tenant}/oauth2/v2.0/token",
-            'keysUrl' => "https://login.microsoftonline.com/{$tenant}/discovery/v2.0/keys",
-            'logoutUrl' => "https://login.microsoftonline.com/{$tenant}/oauth2/v2.0/logout",
+    /**
+     * @param array<string, mixed> $config
+     * @return array<string, string>
+     */
+    private function normalizedOidcProviderConfig(string $provider, array $config): array
+    {
+        if ($provider === 'entra') {
+            $tenant = (string)($config['tenantId'] ?? '');
+            if ($tenant !== '') {
+                $config += [
+                    'issuer' => "https://login.microsoftonline.com/{$tenant}/v2.0",
+                    'authorizeUrl' => "https://login.microsoftonline.com/{$tenant}/oauth2/v2.0/authorize",
+                    'tokenUrl' => "https://login.microsoftonline.com/{$tenant}/oauth2/v2.0/token",
+                    'keysUrl' => "https://login.microsoftonline.com/{$tenant}/discovery/v2.0/keys",
+                    'logoutUrl' => "https://login.microsoftonline.com/{$tenant}/oauth2/v2.0/logout",
+                ];
+            }
+        }
+
+        if ($provider === 'keycloak' && !empty($config['issuer'])) {
+            $issuer = rtrim((string)$config['issuer'], '/');
+            $config += [
+                'authorizeUrl' => "{$issuer}/protocol/openid-connect/auth",
+                'tokenUrl' => "{$issuer}/protocol/openid-connect/token",
+                'keysUrl' => "{$issuer}/protocol/openid-connect/certs",
+                'logoutUrl' => "{$issuer}/protocol/openid-connect/logout",
+            ];
+        }
+
+        $config += [
+            'provider' => $provider,
+            'label' => $provider,
+            'scope' => 'openid profile email',
+            'logoutUrl' => '',
         ];
+
+        foreach ($config as $key => $value) {
+            $config[$key] = (string)$value;
+        }
+
+        return $config;
     }
 
     /**

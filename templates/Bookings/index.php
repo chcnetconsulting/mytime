@@ -25,11 +25,11 @@
         <table>
             <thead>
                 <tr>
+                    <th><?= $this->Paginator->sort('mandant_id', 'Mandant') ?></th>
                     <th><?= $this->Paginator->sort('id') ?></th>
                     <th><?= $this->Paginator->sort('bookingdate') ?></th>
                     <th><?= $this->Paginator->sort('ticket') ?></th>
                     <th><?= $this->Paginator->sort('bookingpsp') ?></th>
-                    <th><?= $this->Paginator->sort('mandant_id', 'Mandant') ?></th>
                     <th><?= $this->Paginator->sort('minutes') ?></th>
 		    <th>Description</th>
 		    <!-- th><?= $this->Paginator->sort('kunde') ?></th>
@@ -41,11 +41,11 @@
             <tbody>
                 <?php foreach ($bookings as $booking): ?>
                 <tr>
+                    <td><?= h($booking->mandant?->name) ?></td>
                     <td><?= $this->Number->format($booking->id) ?></td>
                     <td><?= h($booking->bookingdate) ?></td>
                     <td><?= h($booking->ticket) ?></td>
                     <td><?= h($booking->bookingpsp) ?></td>
-                    <td><?= h($booking->mandant?->name) ?></td>
 		    <td><?= $this->Number->format($booking->minutes) ?></td>
 		    <td><?= h($booking->description) ?></td>
                     <!--td><?= h($booking->kunde) ?></td>

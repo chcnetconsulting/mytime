@@ -16,7 +16,7 @@ class AddUserIdToBookings extends BaseMigration
                 ->addColumn('user_id', 'integer', [
                     'default' => null,
                     'null' => true,
-                    'signed' => false,
+                    'signed' => true,
                     'after' => 'id',
                 ])
                 ->addIndex(['user_id'])
@@ -31,7 +31,7 @@ class AddUserIdToBookings extends BaseMigration
                 ->changeColumn('user_id', 'integer', [
                     'default' => null,
                     'null' => false,
-                    'signed' => false,
+                    'signed' => true,
                 ])
                 ->addForeignKey('user_id', 'users', 'id', [
                     'delete' => 'CASCADE',

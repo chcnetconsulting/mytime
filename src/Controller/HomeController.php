@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Controller;
 
+use Cake\Core\Configure;
 use Cake\ORM\Locator\LocatorAwareTrait;
 /**
  * Home Controller
@@ -12,19 +13,18 @@ class HomeController extends AppController
 {
     use LocatorAwareTrait;
 
-    private function bookingScopeConditions(): array
+    private function groupScopeCondition(): array
     {
+        if (Configure::read('Auth.disabled') && $this->currentUserId() === null) {
+            return [];
+        }
+
         $groupId = $this->currentGroupId();
         if ($groupId !== null) {
             return ['group_id' => $groupId];
         }
 
-        $userId = $this->currentUserId();
-        if ($userId !== null) {
-            return ['user_id' => $userId];
-        }
-
-        return [];
+        return ['id IS' => null];
     }
 
     /**
@@ -36,8 +36,8 @@ class HomeController extends AppController
     {
         $rows = $this->fetchTable('Bookings')
             ->find()
-            ->select(['bookingdate', 'minutes'])
-            ->where($this->bookingScopeConditions())
+            ->select(['id', 'bookingdate', 'bookingpsp', 'ticket', 'description', 'minutes'])
+            ->where($this->groupScopeCondition())
             ->orderBy(['bookingdate' => 'DESC'])
             ->all();
 
@@ -53,11 +53,25 @@ class HomeController extends AppController
                     'month' => $month,
                     'count' => 0,
                     'sum' => 0,
+                    'psps' => [],
+                    'pspTickets' => [],
                 ];
             }
 
             $monthly[$key]->count++;
             $monthly[$key]->sum += $row->minutes;
+
+            $psp = $row->bookingpsp;
+            $monthly[$key]->psps[$psp] = ($monthly[$key]->psps[$psp] ?? 0) + $row->minutes;
+            $monthly[$key]->pspTickets[$psp][$row->ticket] = ['id' => $row->id, 'description' => $row->description];
+        }
+
+        foreach ($monthly as $m) {
+            ksort($m->psps);
+            foreach ($m->pspTickets as &$tickets) {
+                ksort($tickets);
+            }
+            unset($tickets);
         }
 
         $bookings = array_values($monthly);

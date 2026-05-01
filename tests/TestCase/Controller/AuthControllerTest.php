@@ -39,6 +39,46 @@ class AuthControllerTest extends TestCase
         $this->assertStringContainsString('scope=openid+profile+email', $location);
     }
 
+    public function testLoginCanUseKeycloakProvider(): void
+    {
+        Configure::write('Oidc.provider', 'keycloak');
+        Configure::write('Oidc.providers.keycloak', [
+            'issuer' => 'https://keycloak.example.test/realms/mytime',
+            'clientId' => 'keycloak-client',
+            'clientSecret' => 'keycloak-secret',
+            'redirectUri' => 'http://localhost:8765/auth/callback',
+            'scope' => 'openid profile email',
+        ]);
+
+        $this->get('/auth/login');
+
+        $this->assertResponseCode(302);
+        $location = $this->_response->getHeaderLine('Location');
+        $this->assertStringStartsWith(
+            'https://keycloak.example.test/realms/mytime/protocol/openid-connect/auth?',
+            $location
+        );
+        $this->assertStringContainsString('client_id=keycloak-client', $location);
+    }
+
+    public function testLoginCanUseGoogleProvider(): void
+    {
+        Configure::write('Oidc.provider', 'google');
+        Configure::write('Oidc.providers.google.clientId', 'google-client');
+        Configure::write('Oidc.providers.google.clientSecret', 'google-secret');
+        Configure::write('Oidc.providers.google.redirectUri', 'http://localhost:8765/auth/callback');
+
+        $this->get('/auth/login');
+
+        $this->assertResponseCode(302);
+        $location = $this->_response->getHeaderLine('Location');
+        $this->assertStringStartsWith(
+            'https://accounts.google.com/o/oauth2/v2/auth?',
+            $location
+        );
+        $this->assertStringContainsString('client_id=google-client', $location);
+    }
+
     public function testCallbackRejectsInvalidState(): void
     {
         $this->get('/auth/callback?state=bad&code=abc');

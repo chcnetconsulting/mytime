@@ -47,6 +47,7 @@ class BookingsTable extends Table
 
         $this->belongsTo('Mandanten', [
             'foreignKey' => 'mandant_id',
+            'propertyName' => 'mandant',
         ]);
         $this->belongsTo('Users', [
             'foreignKey' => 'user_id',

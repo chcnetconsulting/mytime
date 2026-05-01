@@ -26,11 +26,7 @@
                     <th><?= __('Bookingpsp') ?></th>
                     <td><?= h($booking->bookingpsp) ?></td>
                 </tr>
-                <tr>
-                    <th><?= __('Kunde') ?></th>
-                    <td><?= h($booking->kunde) ?></td>
-                </tr>
-                <tr>
+<tr>
                     <th><?= __('Mandant') ?></th>
                     <td><?= h($booking->mandant?->name) ?></td>
                 </tr>

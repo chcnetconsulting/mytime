@@ -5,6 +5,8 @@
 /logs/*
 /tmp/*
 /vendor/*
+/k8s/02-secret.yaml
+/*.sql
 
 # OS generated files #
 ######################

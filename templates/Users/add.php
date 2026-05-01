@@ -18,6 +18,8 @@
                 <legend><?= __('Add User') ?></legend>
                 <?php
                     echo $this->Form->control('username');
+                    echo $this->Form->control('first_name');
+                    echo $this->Form->control('last_name');
                     echo $this->Form->control('email');
                     echo $this->Form->control('group_id', ['options' => $groups]);
                     echo $this->Form->control('is_admin', ['type' => 'checkbox', 'required' => false]);

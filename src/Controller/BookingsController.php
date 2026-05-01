@@ -3,7 +3,10 @@ declare(strict_types=1);
 
 namespace App\Controller;
 
+use Cake\Core\Configure;
 use Cake\Http\Exception\BadRequestException;
+use Cake\I18n\Date;
+use Mpdf\Mpdf;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
@@ -16,6 +19,10 @@ class BookingsController extends AppController
 {
     private function bookingScopeConditions(): array
     {
+        if (Configure::read('Auth.disabled') && $this->currentUserId() === null) {
+            return [];
+        }
+
         $groupId = $this->currentGroupId();
         if ($groupId !== null) {
             return ['Bookings.group_id' => $groupId];
@@ -103,6 +110,18 @@ class BookingsController extends AppController
             ->where($this->bookingScopeConditions())
             ->groupBy(['bookingpsp'])
             ->all();
+        $tickets = $this->Bookings->find()
+            ->select([
+                'ticket',
+                'last_date' => $this->Bookings->query()->func()->max('bookingdate'),
+                'last_psp' => $this->Bookings->query()->newExpr("SUBSTRING_INDEX(MAX(CONCAT(bookingdate, '|', bookingpsp)), '|', -1)"),
+                'last_desc' => $this->Bookings->query()->newExpr('SUBSTRING(MAX(CONCAT(bookingdate, description)), 11, 50)'),
+            ])
+            ->where($this->bookingScopeConditions())
+            ->where(['ticket REGEXP' => '^[A-Za-z0-9]'])
+            ->groupBy(['ticket'])
+            ->orderBy(['last_date' => 'DESC'])
+            ->all();
         $mandanten = $this->Bookings->Mandanten->find('list')->orderBy(['name' => 'ASC'])->all();
         if ($this->request->is('post')) {
             $booking = $this->Bookings->patchEntity($booking, $this->request->getData());
@@ -115,7 +134,7 @@ class BookingsController extends AppController
             }
             $this->Flash->error(__('The booking could not be saved. Please, try again.'));
         }
-        $this->set(compact('booking','psps', 'mandanten'));
+        $this->set(compact('booking', 'psps', 'tickets', 'mandanten'));
     }
 
     public function ticketLookup()
@@ -284,7 +303,7 @@ class BookingsController extends AppController
 	    ->where($dateConditions)
             ->select(['bookingpsp','minutes'=>$this->Bookings->query()->func()->sum('minutes')])
 	    ->groupBy(['bookingpsp'])
-            ->orderBy(['bookingdate' => 'ASC'])
+            ->orderBy(['bookingpsp' => 'ASC'])
             ->toArray();
 
     $activeWorksheet->setCellValue('B'.$i, 'Booking PSP');
@@ -295,13 +314,21 @@ class BookingsController extends AppController
     $activeWorksheet->getStyle('B'.$i.':D'.$i)->getBorders()->getBottom()->setBorderStyle(\PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN);    
     $activeWorksheet->getStyle('C'.$i.':D'.$i)->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_RIGHT);
     $i++;
+    $totalMinutes = 0;
     foreach($results as $row) {
-        // Set cell A6 with the Excel date/time value
         $activeWorksheet->setCellValue('B'.$i, $row['bookingpsp']);
         $activeWorksheet->setCellValue('C'.$i, $row['minutes']);
         $activeWorksheet->setCellValue('D'.$i, round($row['minutes']/60, 2));
+        $totalMinutes += $row['minutes'];
         $i++;
     }
+
+    $activeWorksheet->getStyle('B'.($i-1).':D'.($i-1))->getBorders()->getBottom()->setBorderStyle(\PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN);
+    $activeWorksheet->setCellValue('B'.$i, 'Total');
+    $activeWorksheet->setCellValue('C'.$i, $totalMinutes);
+    $activeWorksheet->setCellValue('D'.$i, round($totalMinutes / 60, 2));
+    $activeWorksheet->getStyle('B'.$i.':D'.$i)->getFont()->setBold(true);
+    $activeWorksheet->getStyle('C'.$i.':D'.$i)->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_RIGHT);
 
     $activeWorksheet->getStyle('A1:Z99')
     ->getAlignment()->setVertical(\PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_TOP);
@@ -311,10 +338,115 @@ class BookingsController extends AppController
 	$writer->save($tmpname);
     $this->response = $this->response->withFile(
         $tmpname,
-        ['download' => true, 'name' => 'timesheet_christ_'.$year.'-'.str_pad($month, 2, '0',STR_PAD_LEFT).'.xlsx']
+        ['download' => true, 'name' => sprintf('timesheet_%d-%02d.xlsx', $year, $month)]
     );
     return $this->response;
 	exit;
+    }
+
+    public function genpdf($year, $month)
+    {
+        $year = filter_var($year, FILTER_VALIDATE_INT, ['options' => ['min_range' => 2000, 'max_range' => 2100]]);
+        $month = filter_var($month, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1, 'max_range' => 12]]);
+
+        if ($year === false || $month === false) {
+            throw new BadRequestException('Invalid export period.');
+        }
+
+        $userId = $this->currentUserId();
+        $userRecord = $userId ? $this->fetchTable('Users')
+            ->find()->select(['username', 'first_name', 'last_name'])
+            ->where(['id' => $userId])->first() : null;
+        $username = trim(($userRecord?->first_name ?? '') . ' ' . ($userRecord?->last_name ?? ''))
+            ?: ($userRecord?->username ?? '');
+        $monthLabel = Date::create($year, $month, 1)->i18nFormat('MMMM yyyy');
+        $title = "timesheet {$username} {$monthLabel}";
+
+        $bookingDate = $this->Bookings->aliasField('bookingdate');
+        $dateConditions = function ($exp) use ($bookingDate, $year, $month) {
+            return $exp
+                ->eq("YEAR($bookingDate)", $year)
+                ->eq("MONTH($bookingDate)", $month);
+        };
+
+        $results = $this->Bookings->find()
+            ->where($this->bookingScopeConditions())
+            ->where($dateConditions)
+            ->orderBy(['bookingdate' => 'ASC'])
+            ->toArray();
+
+        $pspResults = $this->Bookings->find()
+            ->where($this->bookingScopeConditions())
+            ->where($dateConditions)
+            ->select(['bookingpsp', 'minutes' => $this->Bookings->query()->func()->sum('minutes')])
+            ->groupBy(['bookingpsp'])
+            ->orderBy(['bookingpsp' => 'ASC'])
+            ->toArray();
+
+        $totalMinutes = array_sum(array_map(fn($r) => $r->minutes, $pspResults));
+
+        $html = '
+        <style>
+            body { font-family: sans-serif; font-size: 9pt; }
+            table { width: 100%; border-collapse: collapse; }
+            th { background: #ddd; font-weight: bold; padding: 3px 6px; border-bottom: 2px solid #999; text-align: left; }
+            td { padding: 2px 6px; vertical-align: top; border-bottom: 1px solid #eee; }
+            .right { text-align: right; }
+            .summary { width: 50%; margin-top: 24px; }
+            .total td { font-weight: bold; border-top: 2px solid #666; border-bottom: none; }
+        </style>';
+
+        $html .= '<table>';
+        $html .= '<thead><tr><th>Date</th><th>Ticket</th><th>PSP</th><th>Description</th><th class="right">Minutes</th></tr></thead><tbody>';
+        foreach ($results as $row) {
+            $html .= '<tr>'
+                . '<td>' . h($row->bookingdate->i18nFormat('dd.MM.yyyy')) . '</td>'
+                . '<td>' . h(trim($row->ticket)) . '</td>'
+                . '<td>' . h(trim($row->bookingpsp)) . '</td>'
+                . '<td>' . h(trim($row->description)) . '</td>'
+                . '<td class="right">' . $row->minutes . '</td>'
+                . '</tr>';
+        }
+        $html .= '</tbody></table>';
+
+        $html .= '<table class="summary">';
+        $html .= '<thead><tr><th>Booking PSP</th><th class="right">Minutes</th><th class="right">Hours</th></tr></thead><tbody>';
+        foreach ($pspResults as $row) {
+            $html .= '<tr>'
+                . '<td>' . h($row->bookingpsp) . '</td>'
+                . '<td class="right">' . $row->minutes . '</td>'
+                . '<td class="right">' . round($row->minutes / 60, 2) . '</td>'
+                . '</tr>';
+        }
+        $html .= '<tr class="total">'
+            . '<td>Total</td>'
+            . '<td class="right">' . $totalMinutes . '</td>'
+            . '<td class="right">' . round($totalMinutes / 60, 2) . '</td>'
+            . '</tr>';
+        $html .= '</tbody></table>';
+
+        $mpdf = new Mpdf([
+            'orientation' => 'L',
+            'margin_top'    => 22,
+            'margin_bottom' => 15,
+        ]);
+
+        $mpdf->SetHTMLHeader(
+            '<div style="text-align:center;font-weight:bold;font-size:11pt;">' . h($title) . '</div>'
+        );
+        $mpdf->SetHTMLFooter(
+            '<div style="text-align:center;font-size:9pt;">- {PAGENO} -</div>'
+        );
+
+        $mpdf->WriteHTML($html);
+
+        $filename = sprintf('timesheet_%d-%02d.pdf', $year, $month);
+        $this->response = $this->response
+            ->withHeader('Content-Type', 'application/pdf')
+            ->withHeader('Content-Disposition', 'attachment; filename="' . $filename . '"')
+            ->withStringBody($mpdf->Output('', 'S'));
+
+        return $this->response;
     }
 
 }

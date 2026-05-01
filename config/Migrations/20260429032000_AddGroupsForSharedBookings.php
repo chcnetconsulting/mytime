@@ -27,7 +27,7 @@ class AddGroupsForSharedBookings extends BaseMigration
                 ->create();
         }
 
-        $this->execute("INSERT INTO groups (name, created, modified) SELECT 'Default', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP WHERE NOT EXISTS (SELECT 1 FROM groups WHERE name = 'Default')");
+        $this->execute("INSERT INTO `groups` (name, created, modified) SELECT 'Default', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP WHERE NOT EXISTS (SELECT 1 FROM `groups` WHERE name = 'Default')");
 
         $users = $this->table('users');
         if (!$users->hasColumn('group_id')) {
@@ -35,7 +35,7 @@ class AddGroupsForSharedBookings extends BaseMigration
                 ->addColumn('group_id', 'integer', [
                     'default' => null,
                     'null' => true,
-                    'signed' => false,
+                    'signed' => true,
                 ])
                 ->addColumn('is_admin', 'boolean', [
                     'default' => false,
@@ -45,7 +45,7 @@ class AddGroupsForSharedBookings extends BaseMigration
                 ->update();
         }
 
-        $this->execute("UPDATE users SET group_id = (SELECT id FROM groups WHERE name = 'Default' LIMIT 1) WHERE group_id IS NULL");
+        $this->execute("UPDATE users SET group_id = (SELECT id FROM `groups` WHERE name = 'Default' LIMIT 1) WHERE group_id IS NULL");
 
         $bookings = $this->table('bookings');
         if (!$bookings->hasColumn('group_id')) {
@@ -53,7 +53,7 @@ class AddGroupsForSharedBookings extends BaseMigration
                 ->addColumn('group_id', 'integer', [
                     'default' => null,
                     'null' => true,
-                    'signed' => false,
+                    'signed' => true,
                     'after' => 'user_id',
                 ])
                 ->addIndex(['group_id'])
@@ -77,7 +77,7 @@ class AddGroupsForSharedBookings extends BaseMigration
                 ->changeColumn('group_id', 'integer', [
                     'default' => null,
                     'null' => false,
-                    'signed' => false,
+                    'signed' => true,
                 ])
                 ->addForeignKey('group_id', 'groups', 'id', [
                     'delete' => 'RESTRICT',
@@ -92,7 +92,7 @@ class AddGroupsForSharedBookings extends BaseMigration
                 ->changeColumn('group_id', 'integer', [
                     'default' => null,
                     'null' => false,
-                    'signed' => false,
+                    'signed' => true,
                 ])
                 ->addForeignKey('group_id', 'groups', 'id', [
                     'delete' => 'RESTRICT',

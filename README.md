@@ -1,53 +1,84 @@
-# CakePHP Application Skeleton
+# MyTime
 
-![Build Status](https://github.com/cakephp/app/actions/workflows/ci.yml/badge.svg?branch=master)
-[![Total Downloads](https://img.shields.io/packagist/dt/cakephp/app.svg?style=flat-square)](https://packagist.org/packages/cakephp/app)
-[![PHPStan](https://img.shields.io/badge/PHPStan-level%207-brightgreen.svg?style=flat-square)](https://github.com/phpstan/phpstan)
+MyTime ist eine interne Zeiterfassungsanwendung auf Basis von CakePHP 5.3.
+Die Anwendung verwaltet Buchungen pro Ticket, PSP, Mandant, Benutzer und Gruppe.
+Benutzer melden sich per OpenID Connect an; Microsoft Entra ID ist bewusst die
+erste und standardmaessige Konfiguration, kann aber gegen Keycloak, Google oder
+einen generischen OIDC-Provider getauscht werden.
 
-A skeleton for creating applications with [CakePHP](https://cakephp.org) 5.x.
+## Funktionen
 
-The framework source code can be found here: [cakephp/cakephp](https://github.com/cakephp/cakephp).
+- Buchungen anlegen, bearbeiten, suchen und loeschen
+- Ticket-Lookup beim Anlegen: vorhandene Ticketdaten werden als Vorschlag geladen
+- PSP-Auswahl aus bestehenden Buchungen in Add- und Edit-Dialog
+- Mandanten-CRUD und Mandanten-Auswahl in Buchungen
+- Benutzer- und Gruppenverwaltung fuer gemeinsam bearbeitbare Buchungen
+- Admin-Rechte per Entra-Besitzer-E-Mail oder `is_admin`
+- OIDC-Login mit Entra, Keycloak, Google oder Custom Provider
+- Monats-Export als XLSX
+- Migrationen fuer neue Installationen und ein separates Produktions-Upgrade-Script
 
-## Installation
+## Dokumentation
 
-1. Download [Composer](https://getcomposer.org/doc/00-intro.md) or update `composer self-update`.
-2. Run `php composer.phar create-project --prefer-dist cakephp/app [app_name]`.
+- [Konfiguration](docs/configuration.md)
+- [Authentifizierung und Berechtigungen](docs/authentication.md)
+- [Datenbank und Migrationen](docs/database.md)
+- [Tests](docs/testing.md)
+- [Entwicklung](docs/development.md)
+- [Betrieb und Troubleshooting](docs/operations.md)
+- [Kubernetes Deployment](k8s/README.md)
 
-If Composer is installed globally, run
+## Schnellstart lokal
 
 ```bash
-composer create-project --prefer-dist cakephp/app
-```
-
-In case you want to use a custom app dir name (e.g. `/myapp/`):
-
-```bash
-composer create-project --prefer-dist cakephp/app myapp
-```
-
-You can now either use your machine's webserver to view the default home page, or start
-up the built-in webserver with:
-
-```bash
+composer install
+cp config/.env.example config/.env
+bin/cake migrations migrate
 bin/cake server -p 8765
 ```
 
-Then visit `http://localhost:8765` to see the welcome page.
+Danach ist die Anwendung unter `http://localhost:8765/` erreichbar.
 
-## Update
+Fuer lokale Smoke-Tests ohne OIDC kann Auth temporaer deaktiviert werden:
 
-Since this skeleton is a starting point for your application and various files
-would have been modified as per your needs, there isn't a way to provide
-automated upgrades, so you have to do any updates manually.
+```bash
+MYTIME_AUTH_DISABLED=true bin/cake server -p 8765
+```
 
-## Configuration
+Diese Einstellung ist nur fuer lokale Entwicklung und Tests gedacht.
 
-Read and edit the environment specific `config/app_local.php` and set up the
-`'Datasources'` and any other configuration relevant for your application.
-Other environment agnostic settings can be changed in `config/app.php`.
+## Wichtige URLs
 
-## Layout
+- `/` oder `/home`: Uebersicht
+- `/bookings`: Buchungen
+- `/bookings/add`: Buchung anlegen
+- `/bookings/ticket-lookup?ticket=<ticket>`: JSON-Ticket-Lookup
+- `/bookings/genxls/<jahr>/<monat>`: XLSX-Export
+- `/mandanten`: Mandanten
+- `/users`: Benutzerverwaltung, nur Admins
+- `/groups`: Gruppenverwaltung, nur Admins
+- `/auth/login`: OIDC-Login
+- `/auth/callback`: OIDC-Redirect-URI
+- `/auth/logout`: Logout
 
-The app skeleton uses [Milligram](https://milligram.io/) (v1.3) minimalist CSS
-framework by default. You can, however, replace it with any other library or
-custom styles.
+## Standard-Kommandos
+
+```bash
+vendor/bin/phpunit --colors=never
+bin/cake migrations status
+bin/cake migrations migrate
+bin/cake schema_cache clear
+bin/cake cache clear_all
+```
+
+## Architektur kurz
+
+MyTime nutzt klassische CakePHP-Controller, ORM-Tabellen und Templates.
+Die Authentifizierung liegt in `AuthController`; der Provider wird ueber
+`config/app_local.php` und Umgebungsvariablen gewaehlt. Die Zugriffskontrolle
+sitzt zentral in `AppController` und in den Admin-Controllern.
+
+Buchungen gehoeren einem User, einer Gruppe und einem Mandanten. Normale User
+sehen die Buchungen ihrer Gruppe; falls kein Gruppenbezug vorhanden ist, wird
+auf eigene Buchungen eingeschraenkt. Admins koennen User und Gruppen verwalten
+und haben Zugriff auf alle Buchungen.

@@ -19,10 +19,15 @@
                 <legend><?= __('Add Booking') ?></legend>
                 <?php
                     echo $this->Form->control('bookingdate');
-                    echo $this->Form->control('ticket');
-		    //echo $this->Form->select('bookingpsp', $psps);
-		?>
-		<select id="bookingpsp" name="bookingpsp" class="select2">
+                ?>
+                <label for="ticket">Ticket</label>
+                <select id="ticket" name="ticket" class="select2">
+                    <?php foreach ($tickets as $t): ?>
+                    <option value="<?= h($t->ticket) ?>" data-desc="<?= h(mb_substr($t->last_desc, 0, 50)) ?>"><?= h($t->ticket) ?> (<?= h(date('d.m.Y', strtotime(substr((string)$t->last_date, 0, 10)))) ?>) - <?= h($t->last_psp) ?></option>
+                    <?php endforeach; ?>
+                </select>
+                <label for="bookingpsp">Booking PSP</label>
+                <select id="bookingpsp" name="bookingpsp" class="select2">
 		<?php
 		    foreach($psps as $psp):
 		?>
@@ -52,9 +57,18 @@ $(document).ready(function () {
     const ticketLookupUrl = "<?= $this->Url->build(['action' => 'ticketLookup']) ?>";
     let lastLookupTicket = null;
 
-    $bookingPsp.select2({
-        tags: true
+    $("#ticket").select2({
+        tags: true,
+        templateResult: function(data) {
+            if (!data.element) return data.text;
+            var desc = $(data.element).data('desc');
+            if (!desc) return data.text;
+            var $el = $('<span>').append(document.createTextNode(data.text + ' '));
+            $el.append($('<em>').text(desc));
+            return $el;
+        }
     });
+    $bookingPsp.select2({ tags: true });
 
     function setSelect2Value(value) {
         if (!value) {
@@ -92,7 +106,6 @@ $(document).ready(function () {
         }
 
         const booking = payload.booking;
-        $("#bookingdate").val(booking.bookingdate);
         $("#description").val(booking.description);
         $("#minutes").val("");
         $("#mandant-id").val(booking.mandant_id).trigger("change");
@@ -100,7 +113,7 @@ $(document).ready(function () {
         setSelect2Value(booking.bookingpsp);
     }
 
-    $("#ticket").on("blur change", loadTicketDefaults);
+    $("#ticket").on("change", loadTicketDefaults);
     $("#mandant-id").select2();
 });
 </script>

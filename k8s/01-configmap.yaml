@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mytime-config
+  namespace: mytime
+data:
+  APP_NAME: "MyTime"
+  DEBUG: "false"
+  APP_ENCODING: "UTF-8"
+  APP_DEFAULT_LOCALE: "de_AT"
+  APP_DEFAULT_TIMEZONE: "Europe/Vienna"
+  DATABASE_QUOTE_IDENTIFIERS: "true"
+  OIDC_PROVIDER: "entra"
+  ENTRA_REDIRECT_URI: "https://mytime.example.com/auth/callback"
+  ENTRA_SCOPE: "openid profile email"
+  MYTIME_AUTH_DISABLED: "false"
