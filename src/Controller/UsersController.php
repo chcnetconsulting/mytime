@@ -18,6 +18,10 @@ class UsersController extends AppController
     {
         parent::beforeFilter($event);
 
+        if ($event->getResult() instanceof \Cake\Http\Response) {
+            return;
+        }
+
         if (Configure::read('Auth.disabled')) {
             return null;
         }
