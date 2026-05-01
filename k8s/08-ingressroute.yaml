@@ -1,4 +1,33 @@
 apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: redirect-to-https
+  namespace: mytime
+spec:
+  redirectScheme:
+    scheme: https
+    permanent: true
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: mytime-http
+  namespace: mytime
+  labels:
+    app.kubernetes.io/name: mytime
+spec:
+  entryPoints:
+    - web
+  routes:
+    - match: Host(`mytime.chcnet.at`)
+      kind: Rule
+      middlewares:
+        - name: redirect-to-https
+      services:
+        - name: mytime
+          port: 80
+---
+apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
   name: mytime
@@ -15,4 +44,4 @@ spec:
         - name: mytime
           port: 80
   tls:
-    secretName: mytime-tls
+    certResolver: letsencrypt
