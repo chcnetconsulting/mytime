@@ -43,5 +43,10 @@ spec:
       services:
         - name: mytime
           port: 80
+          sticky:
+            cookie:
+              name: mytime_lb
+              secure: true
+              httpOnly: true
   tls:
     certResolver: letsencrypt
