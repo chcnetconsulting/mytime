@@ -17,7 +17,7 @@ spec:
       restartPolicy: Never
       containers:
         - name: migrations
-          image: ghcr.io/example/mytime:latest
+          image: chcnetconsulting/mytime:2.0.0
           imagePullPolicy: IfNotPresent
           command:
             - sh

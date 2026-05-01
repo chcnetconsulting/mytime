@@ -16,12 +16,12 @@ Diese Manifeste deployen MyTime in den Namespace `mytime`.
 
 ## Vor Deployment anpassen
 
-In allen Dateien `mytime.example.com` ersetzen.
+In allen Dateien `mytime.chcnet.at` ersetzen.
 
 In diesen Dateien das Image ersetzen:
 
 ```text
-ghcr.io/example/mytime:latest
+chcnetconsulting/mytime:2.0.0
 ```
 
 In `01-configmap.yaml` muss `ENTRA_REDIRECT_URI` zur echten Domain passen:

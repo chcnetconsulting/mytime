@@ -20,7 +20,7 @@ spec:
         fsGroupChangePolicy: OnRootMismatch
       initContainers:
         - name: app-copy
-          image: ghcr.io/example/mytime:latest
+          image: chcnetconsulting/mytime:2.0.0
           imagePullPolicy: IfNotPresent
           securityContext:
             runAsUser: 0
@@ -37,7 +37,7 @@ spec:
               mountPath: /logs-cake
       containers:
         - name: php-fpm
-          image: ghcr.io/example/mytime:latest
+          image: chcnetconsulting/mytime:2.0.0
           imagePullPolicy: IfNotPresent
           ports:
             - name: fpm
@@ -91,7 +91,7 @@ spec:
               port: http
               httpHeaders:
                 - name: Host
-                  value: mytime.example.com
+                  value: mytime.chcnet.at
             initialDelaySeconds: 10
             periodSeconds: 10
           livenessProbe:
@@ -100,7 +100,7 @@ spec:
               port: http
               httpHeaders:
                 - name: Host
-                  value: mytime.example.com
+                  value: mytime.chcnet.at
             initialDelaySeconds: 30
             periodSeconds: 20
           resources:

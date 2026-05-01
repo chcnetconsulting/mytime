@@ -9,7 +9,7 @@ spec:
   entryPoints:
     - websecure
   routes:
-    - match: Host(`mytime.example.com`)
+    - match: Host(`mytime.chcnet.at`)
       kind: Rule
       services:
         - name: mytime

@@ -11,6 +11,6 @@ data:
   APP_DEFAULT_TIMEZONE: "Europe/Vienna"
   DATABASE_QUOTE_IDENTIFIERS: "true"
   OIDC_PROVIDER: "entra"
-  ENTRA_REDIRECT_URI: "https://mytime.example.com/auth/callback"
+  ENTRA_REDIRECT_URI: "https://mytime.chcnet.at/auth/callback"
   ENTRA_SCOPE: "openid profile email"
   MYTIME_AUTH_DISABLED: "false"

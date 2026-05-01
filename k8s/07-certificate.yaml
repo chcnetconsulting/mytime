@@ -9,4 +9,4 @@ spec:
     name: le
     kind: ClusterIssuer
   dnsNames:
-    - mytime.example.com
+    - mytime.chcnet.at
