@@ -40,6 +40,50 @@ class BookingsController extends AppController
         return ['Bookings.id IS' => null];
     }
 
+    private function queryMandantId(): ?int
+    {
+        $raw = $this->request->getQuery('mandant_id');
+        if ($raw === null || $raw === '') {
+            return null;
+        }
+        $parsed = filter_var($raw, FILTER_VALIDATE_INT);
+
+        return ($parsed !== false && $parsed > 0) ? $parsed : null;
+    }
+
+    private function exportFilename(string $ext, ?string $mandantName, int $year, int $month): string
+    {
+        $userId = $this->currentUserId();
+        $userRecord = $userId ? $this->fetchTable('Users')
+            ->find()->select(['username', 'first_name', 'last_name'])
+            ->where(['id' => $userId])->first() : null;
+        $first = trim((string)($userRecord?->first_name ?? ''));
+        $last = trim((string)($userRecord?->last_name ?? ''));
+        if ($first === '' && $last === '') {
+            $first = (string)($userRecord?->username ?? '');
+        }
+
+        $sanitize = static function (string $s): string {
+            $s = preg_replace('/[^A-Za-z0-9._-]+/', '-', $s) ?? '';
+            return trim($s, '-');
+        };
+
+        $parts = ['timesheet'];
+        if ($mandantName !== null && $mandantName !== '') {
+            $parts[] = $sanitize($mandantName);
+        }
+        if ($first !== '') {
+            $parts[] = $sanitize($first);
+        }
+        if ($last !== '') {
+            $parts[] = $sanitize($last);
+        }
+        $parts[] = sprintf('%04d', $year);
+        $parts[] = sprintf('%02d', $month);
+
+        return implode('_', array_filter($parts, static fn($p) => $p !== '')) . '.' . $ext;
+    }
+
     /**
      * Index method
      *
@@ -249,6 +293,21 @@ class BookingsController extends AppController
             throw new BadRequestException('Invalid export period.');
         }
 
+        $mandantId = $this->queryMandantId();
+        $mandantName = null;
+        if ($mandantId !== null) {
+            $mandant = $this->Bookings->Mandanten->find()
+                ->select(['id', 'name'])
+                ->where(['id' => $mandantId])
+                ->first();
+            if ($mandant === null) {
+                $mandantId = null;
+            } else {
+                $mandantName = (string)$mandant->name;
+            }
+        }
+        $mandantConditions = $mandantId !== null ? ['Bookings.mandant_id' => $mandantId] : [];
+
 	$spreadsheet = new Spreadsheet();
 	$activeWorksheet = $spreadsheet->getActiveSheet();
 	$activeWorksheet->setCellValue('A1', 'Date');
@@ -271,6 +330,7 @@ class BookingsController extends AppController
 	$results = $this->Bookings->find()
              ->where($this->bookingScopeConditions())
 			 ->where($dateConditions)
+			 ->where($mandantConditions)
 			 ->orderBy(['bookingdate' => 'ASC'])
 			 ->toArray();
 
@@ -301,6 +361,7 @@ class BookingsController extends AppController
     $results = $this->Bookings->find()
             ->where($this->bookingScopeConditions())
 	    ->where($dateConditions)
+	    ->where($mandantConditions)
             ->select(['bookingpsp','minutes'=>$this->Bookings->query()->func()->sum('minutes')])
 	    ->groupBy(['bookingpsp'])
             ->orderBy(['bookingpsp' => 'ASC'])
@@ -338,10 +399,9 @@ class BookingsController extends AppController
 	$writer->save($tmpname);
     $this->response = $this->response->withFile(
         $tmpname,
-        ['download' => true, 'name' => sprintf('timesheet_%d-%02d.xlsx', $year, $month)]
+        ['download' => true, 'name' => $this->exportFilename('xlsx', $mandantName, $year, $month)]
     );
     return $this->response;
-	exit;
     }
 
     public function genpdf($year, $month)
@@ -353,6 +413,21 @@ class BookingsController extends AppController
             throw new BadRequestException('Invalid export period.');
         }
 
+        $mandantId = $this->queryMandantId();
+        $mandantName = null;
+        if ($mandantId !== null) {
+            $mandant = $this->Bookings->Mandanten->find()
+                ->select(['id', 'name'])
+                ->where(['id' => $mandantId])
+                ->first();
+            if ($mandant === null) {
+                $mandantId = null;
+            } else {
+                $mandantName = (string)$mandant->name;
+            }
+        }
+        $mandantConditions = $mandantId !== null ? ['Bookings.mandant_id' => $mandantId] : [];
+
         $userId = $this->currentUserId();
         $userRecord = $userId ? $this->fetchTable('Users')
             ->find()->select(['username', 'first_name', 'last_name'])
@@ -361,6 +436,9 @@ class BookingsController extends AppController
             ?: ($userRecord?->username ?? '');
         $monthLabel = Date::create($year, $month, 1)->i18nFormat('MMMM yyyy');
         $title = "timesheet {$username} {$monthLabel}";
+        if ($mandantName !== null) {
+            $title .= " — {$mandantName}";
+        }
 
         $bookingDate = $this->Bookings->aliasField('bookingdate');
         $dateConditions = function ($exp) use ($bookingDate, $year, $month) {
@@ -372,12 +450,14 @@ class BookingsController extends AppController
         $results = $this->Bookings->find()
             ->where($this->bookingScopeConditions())
             ->where($dateConditions)
+            ->where($mandantConditions)
             ->orderBy(['bookingdate' => 'ASC'])
             ->toArray();
 
         $pspResults = $this->Bookings->find()
             ->where($this->bookingScopeConditions())
             ->where($dateConditions)
+            ->where($mandantConditions)
             ->select(['bookingpsp', 'minutes' => $this->Bookings->query()->func()->sum('minutes')])
             ->groupBy(['bookingpsp'])
             ->orderBy(['bookingpsp' => 'ASC'])
@@ -440,7 +520,7 @@ class BookingsController extends AppController
 
         $mpdf->WriteHTML($html);
 
-        $filename = sprintf('timesheet_%d-%02d.pdf', $year, $month);
+        $filename = $this->exportFilename('pdf', $mandantName, $year, $month);
         $this->response = $this->response
             ->withHeader('Content-Type', 'application/pdf')
             ->withHeader('Content-Disposition', 'attachment; filename="' . $filename . '"')

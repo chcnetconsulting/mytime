@@ -34,12 +34,48 @@ class HomeController extends AppController
      */
     public function index()
     {
-        $rows = $this->fetchTable('Bookings')
-            ->find()
+        $bookingsTable = $this->fetchTable('Bookings');
+        $scope = $this->groupScopeCondition();
+
+        $rawMandantId = $this->request->getQuery('mandant_id');
+        $selectedMandantId = null;
+        if ($rawMandantId !== null && $rawMandantId !== '') {
+            $parsed = filter_var($rawMandantId, FILTER_VALIDATE_INT);
+            if ($parsed !== false && $parsed > 0) {
+                $selectedMandantId = $parsed;
+            }
+        }
+
+        $mandantIds = $bookingsTable->find()
+            ->select(['mandant_id'])
+            ->where($scope)
+            ->where(['mandant_id IS NOT' => null])
+            ->groupBy(['mandant_id'])
+            ->all()
+            ->extract('mandant_id')
+            ->toList();
+
+        $mandanten = $mandantIds
+            ? $this->fetchTable('Mandanten')->find('list')
+                ->where(['id IN' => $mandantIds])
+                ->orderBy(['name' => 'ASC'])
+                ->toArray()
+            : [];
+
+        if ($selectedMandantId !== null && !isset($mandanten[$selectedMandantId])) {
+            $selectedMandantId = null;
+        }
+
+        $query = $bookingsTable->find()
             ->select(['id', 'bookingdate', 'bookingpsp', 'ticket', 'description', 'minutes'])
-            ->where($this->groupScopeCondition())
-            ->orderBy(['bookingdate' => 'DESC'])
-            ->all();
+            ->where($scope)
+            ->orderBy(['bookingdate' => 'DESC']);
+
+        if ($selectedMandantId !== null) {
+            $query->where(['mandant_id' => $selectedMandantId]);
+        }
+
+        $rows = $query->all();
 
         $monthly = [];
         foreach ($rows as $row) {
@@ -76,6 +112,6 @@ class HomeController extends AppController
 
         $bookings = array_values($monthly);
 
-        $this->set(compact('bookings'));
+        $this->set(compact('bookings', 'mandanten', 'selectedMandantId'));
     }
 }

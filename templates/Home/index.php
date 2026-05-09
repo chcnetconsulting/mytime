@@ -18,7 +18,21 @@
 .ticket-list td { padding: 1px 6px 1px 0; vertical-align: top; white-space: nowrap; }
 .ticket-list td:first-child { font-weight: bold; }
 .ticket-list td:last-child { white-space: normal; text-align: left; }
+.mandant-filter { margin: 8px 0 16px 0; }
+.mandant-filter label { font-weight: bold; margin-right: 8px; }
 </style>
+
+<?php $mandantQuery = $selectedMandantId ? '?mandant_id=' . $selectedMandantId : ''; ?>
+
+<form method="get" class="mandant-filter" id="mandant-form">
+    <label for="mandant_id">Mandant:</label>
+    <select name="mandant_id" id="mandant_id" onchange="document.getElementById('mandant-form').submit()">
+        <option value="">— Alle Mandanten —</option>
+        <?php foreach ($mandanten as $id => $name): ?>
+        <option value="<?= h($id) ?>"<?= $selectedMandantId === (int)$id ? ' selected' : '' ?>><?= h($name) ?></option>
+        <?php endforeach; ?>
+    </select>
+</form>
 
 <table>
     <?php foreach($bookings as $i => $b): ?>
@@ -30,9 +44,9 @@
             <td><?= $b->sum ?> Minuten</td>
             <td><?= round($b->sum / 60, 2) ?> Stunden</td>
             <td>
-                <a href="/bookings/genxls/<?= $b->year . '/' . $b->month ?>" title="Excel <?= h($label) ?>">&#x2B07; XLS</a>
+                <a href="/bookings/genxls/<?= $b->year . '/' . $b->month . $mandantQuery ?>" title="Excel <?= h($label) ?>">&#x2B07; XLS</a>
                 &nbsp;
-                <a href="/bookings/genpdf/<?= $b->year . '/' . $b->month ?>" title="PDF <?= h($label) ?>">&#x2B07; PDF</a>
+                <a href="/bookings/genpdf/<?= $b->year . '/' . $b->month . $mandantQuery ?>" title="PDF <?= h($label) ?>">&#x2B07; PDF</a>
             </td>
         </tr>
         <tr class="psp-detail" id="psp-<?= $i ?>">
