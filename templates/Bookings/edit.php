@@ -48,7 +48,6 @@
                         'class' => 'select2',
                         'label' => 'Mandant',
                     ]);
-                    echo $this->Form->control('kunde');
                 ?>
             </fieldset>
             <?= $this->Form->button(__('Submit')) ?>

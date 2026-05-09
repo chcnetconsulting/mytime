@@ -43,7 +43,6 @@
                         'class' => 'select2',
                         'label' => 'Mandant',
                     ]);
-                    echo $this->Form->control('kunde');
                 ?>
             </fieldset>
             <?= $this->Form->button(__('Submit')) ?>
@@ -146,7 +145,6 @@ $(document).ready(function () {
         $("#description").val(booking.description);
         $("#minutes").val("");
         $mandant.val(booking.mandant_id).trigger("change");
-        $("#kunde").val(booking.kunde);
         setSelect2Value(booking.bookingpsp);
     }
 

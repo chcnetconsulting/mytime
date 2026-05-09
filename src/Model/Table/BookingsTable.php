@@ -94,7 +94,7 @@ class BookingsTable extends Table
         $validator
             ->scalar('kunde')
             ->maxLength('kunde', 20)
-            ->notEmptyString('kunde');
+            ->allowEmptyString('kunde');
 
         $validator
             ->integer('mandant_id')
