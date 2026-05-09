@@ -103,12 +103,12 @@ $(document).ready(function () {
         $select.html(originalHTML);
         pruneByMandant($select, mandantId);
 
-        if (current && current !== "") {
-            var hasCurrent = $select.find("option").filter(function() { return this.value === current; }).length > 0;
-            if (!hasCurrent) {
-                $select.append(new Option(current, current, true, true));
-            }
+        var hasCurrent = current && current !== "" &&
+            $select.find("option").filter(function() { return this.value === current; }).length > 0;
+        if (hasCurrent) {
             $select.val(current);
+        } else {
+            $select.val(null);
         }
         initFn();
     }

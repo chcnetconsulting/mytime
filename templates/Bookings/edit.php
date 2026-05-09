@@ -91,12 +91,12 @@ $(document).ready(function () {
         $bookingPsp.html(pspOptionsHTML);
         pruneByMandant($bookingPsp, mandantId);
 
-        if (current && current !== "") {
-            var hasCurrent = $bookingPsp.find("option").filter(function() { return this.value === current; }).length > 0;
-            if (!hasCurrent) {
-                $bookingPsp.append(new Option(current, current, true, true));
-            }
+        var hasCurrent = current && current !== "" &&
+            $bookingPsp.find("option").filter(function() { return this.value === current; }).length > 0;
+        if (hasCurrent) {
             $bookingPsp.val(current);
+        } else {
+            $bookingPsp.val(null);
         }
         pspSelect2();
     }
