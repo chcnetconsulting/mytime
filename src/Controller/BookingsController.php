@@ -101,6 +101,28 @@ class BookingsController extends AppController
 
     public function index() {
         $suche = $this->request->getQuery('table_search');
+        $selectedMandantId = $this->queryMandantId();
+
+        $mandantIds = $this->Bookings->find()
+            ->select(['mandant_id'])
+            ->where($this->bookingScopeConditions())
+            ->where(['Bookings.mandant_id IS NOT' => null])
+            ->groupBy(['Bookings.mandant_id'])
+            ->all()
+            ->extract('mandant_id')
+            ->toList();
+
+        $mandanten = $mandantIds
+            ? $this->Bookings->Mandanten->find('list')
+                ->where(['id IN' => $mandantIds])
+                ->orderBy(['name' => 'ASC'])
+                ->toArray()
+            : [];
+
+        if ($selectedMandantId !== null && !isset($mandanten[$selectedMandantId])) {
+            $selectedMandantId = null;
+        }
+
         if (!is_null($suche) && $suche !== "") {
             $query = $this->Bookings->find()
                 ->contain(['Mandanten'])
@@ -119,9 +141,14 @@ class BookingsController extends AppController
                 ->where($this->bookingScopeConditions())
 	        ->orderBy(['Bookings.bookingdate' => 'DESC']);
         }
+
+        if ($selectedMandantId !== null) {
+            $query->where(['Bookings.mandant_id' => $selectedMandantId]);
+        }
+
         $this->set('suche', $suche);
 	$bookings = $this->paginate($query);
-        $this->set(compact('bookings'));	
+        $this->set(compact('bookings', 'mandanten', 'selectedMandantId'));
     }
 
     /**

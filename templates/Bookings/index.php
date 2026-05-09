@@ -10,18 +10,29 @@
     <div class="table-responsive">
 
 	<div>
-		 <?php echo $this->Form->create(null, ['action' => $this->Url->build(), 'method' => 'get', 'role' => 'form']); ?>
-                        <div class="input-group input-group-sm" style="width: 150px;">
-                            <input type="text" name="table_search" class="form-control pull-right"
-                                placeholder="<?php echo __('Search'); ?>">
+		 <?php echo $this->Form->create(null, ['action' => $this->Url->build(), 'method' => 'get', 'role' => 'form', 'id' => 'bookings-filter-form']); ?>
+                        <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+                            <label for="mandant_id" style="font-weight: bold;">Mandant:</label>
+                            <select name="mandant_id" id="mandant_id" onchange="document.getElementById('bookings-filter-form').submit()">
+                                <option value="">— Alle Mandanten —</option>
+                                <?php foreach ($mandanten as $id => $name): ?>
+                                <option value="<?= h($id) ?>"<?= $selectedMandantId === (int)$id ? ' selected' : '' ?>><?= h($name) ?></option>
+                                <?php endforeach; ?>
+                            </select>
 
-                            <div class="input-group-btn">
-                                <button type="submit" class="btn">Go!</button>
+                            <div class="input-group input-group-sm" style="width: 200px;">
+                                <input type="text" name="table_search" class="form-control pull-right"
+                                    value="<?= h((string)($suche ?? '')) ?>"
+                                    placeholder="<?php echo __('Search'); ?>">
+
+                                <div class="input-group-btn">
+                                    <button type="submit" class="btn">Go!</button>
+                                </div>
                             </div>
                         </div>
                  </form>
 
-	</div>	
+	</div>
         <table>
             <thead>
                 <tr>
