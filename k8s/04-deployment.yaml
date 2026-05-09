@@ -20,7 +20,7 @@ spec:
         fsGroupChangePolicy: OnRootMismatch
       initContainers:
         - name: app-copy
-          image: chcnetconsulting/mytime:2.0.7
+          image: chcnetconsulting/mytime:2.0.8
           imagePullPolicy: IfNotPresent
           securityContext:
             runAsUser: 0
@@ -37,7 +37,7 @@ spec:
               mountPath: /logs-cake
       containers:
         - name: php-fpm
-          image: chcnetconsulting/mytime:2.0.7
+          image: chcnetconsulting/mytime:2.0.8
           imagePullPolicy: IfNotPresent
           ports:
             - name: fpm
