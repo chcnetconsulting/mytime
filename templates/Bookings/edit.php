@@ -33,7 +33,7 @@
                         $selected = $psp->bookingpsp === $booking->bookingpsp;
                         $hasCurrentPsp = $hasCurrentPsp || $selected;
                     ?>
-                    <option value="<?= h($psp->bookingpsp) ?>" <?= $selected ? 'selected' : '' ?>><?= h($psp->bookingpsp) ?></option>
+                    <option value="<?= h($psp->bookingpsp) ?>" data-mandanten="<?= h((string)$psp->mandanten) ?>" <?= $selected ? 'selected' : '' ?>><?= h($psp->bookingpsp) ?></option>
                     <?php endforeach; ?>
                     <?php if ($booking->bookingpsp !== null && !$hasCurrentPsp): ?>
                     <option value="<?= h($booking->bookingpsp) ?>" selected><?= h($booking->bookingpsp) ?></option>
@@ -58,9 +58,46 @@
 </div>
 <script>
 $(document).ready(function () {
-   $("#bookingpsp").select2( {
-  tags: true
-}  );
-   $("#mandant-id").select2();
+    const $bookingPsp = $("#bookingpsp");
+    const $mandant = $("#mandant-id");
+    const pspOptionsAll = $bookingPsp.find("option").toArray();
+
+    function pspSelect2() {
+        $bookingPsp.select2({ tags: true });
+    }
+
+    function optionMatchesMandant(opt, mandantId) {
+        if (!mandantId) return true;
+        var raw = opt.getAttribute("data-mandanten") || "";
+        var ids = raw.split(",").map(function(s) { return s.trim(); }).filter(Boolean);
+        if (ids.length === 0) return false;
+        return ids.indexOf(String(mandantId)) >= 0;
+    }
+
+    function refreshPsp() {
+        var mandantId = $mandant.val();
+        var current = $bookingPsp.val();
+
+        if ($bookingPsp.hasClass("select2-hidden-accessible")) {
+            $bookingPsp.select2("destroy");
+        }
+        $bookingPsp.empty();
+        pspOptionsAll.forEach(function(opt) {
+            if (optionMatchesMandant(opt, mandantId)) {
+                $bookingPsp.append(opt.cloneNode(true));
+            }
+        });
+        if (current && current !== "" &&
+            $bookingPsp.find("option").filter(function() { return this.value === current; }).length === 0) {
+            $bookingPsp.append(new Option(current, current, true, true));
+        }
+        if (current) $bookingPsp.val(current);
+
+        pspSelect2();
+    }
+
+    pspSelect2();
+    $mandant.select2();
+    $mandant.on("change", refreshPsp);
 });
 </script>
