@@ -179,7 +179,7 @@ class BookingsController extends AppController
 	$psps = $this->Bookings->find()
             ->select([
                 'bookingpsp',
-                'mandanten' => $this->Bookings->query()->newExpr('GROUP_CONCAT(DISTINCT mandant_id)'),
+                'mandanten' => $this->Bookings->query()->newExpr('CAST(GROUP_CONCAT(DISTINCT mandant_id) AS CHAR)'),
             ])
             ->where($this->bookingScopeConditions())
             ->groupBy(['bookingpsp'])
@@ -190,7 +190,7 @@ class BookingsController extends AppController
                 'last_date' => $this->Bookings->query()->func()->max('bookingdate'),
                 'last_psp' => $this->Bookings->query()->newExpr("SUBSTRING_INDEX(MAX(CONCAT(bookingdate, '|', bookingpsp)), '|', -1)"),
                 'last_desc' => $this->Bookings->query()->newExpr('SUBSTRING(MAX(CONCAT(bookingdate, description)), 11, 50)'),
-                'mandanten' => $this->Bookings->query()->newExpr('GROUP_CONCAT(DISTINCT mandant_id)'),
+                'mandanten' => $this->Bookings->query()->newExpr('CAST(GROUP_CONCAT(DISTINCT mandant_id) AS CHAR)'),
             ])
             ->where($this->bookingScopeConditions())
             ->where(['ticket REGEXP' => '^[A-Za-z0-9]'])
@@ -271,7 +271,7 @@ class BookingsController extends AppController
         $psps = $this->Bookings->find()
             ->select([
                 'bookingpsp',
-                'mandanten' => $this->Bookings->query()->newExpr('GROUP_CONCAT(DISTINCT mandant_id)'),
+                'mandanten' => $this->Bookings->query()->newExpr('CAST(GROUP_CONCAT(DISTINCT mandant_id) AS CHAR)'),
             ])
             ->where($this->bookingScopeConditions())
             ->groupBy(['bookingpsp'])

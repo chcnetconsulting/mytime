@@ -60,18 +60,25 @@
 $(document).ready(function () {
     const $bookingPsp = $("#bookingpsp");
     const $mandant = $("#mandant-id");
-    const pspOptionsAll = $bookingPsp.find("option").toArray();
+    const pspOptionsHTML = $bookingPsp.html();
 
     function pspSelect2() {
         $bookingPsp.select2({ tags: true });
     }
 
-    function optionMatchesMandant(opt, mandantId) {
-        if (!mandantId) return true;
-        var raw = opt.getAttribute("data-mandanten") || "";
-        var ids = raw.split(",").map(function(s) { return s.trim(); }).filter(Boolean);
-        if (ids.length === 0) return false;
-        return ids.indexOf(String(mandantId)) >= 0;
+    function pruneByMandant($select, mandantId) {
+        if (!mandantId) return;
+        $select.find("option").each(function() {
+            var raw = (this.getAttribute("data-mandanten") || "").trim();
+            if (raw === "") {
+                $(this).remove();
+                return;
+            }
+            var ids = raw.split(",").map(function(s) { return s.trim(); }).filter(Boolean);
+            if (ids.indexOf(String(mandantId)) === -1) {
+                $(this).remove();
+            }
+        });
     }
 
     function refreshPsp() {
@@ -81,18 +88,16 @@ $(document).ready(function () {
         if ($bookingPsp.hasClass("select2-hidden-accessible")) {
             $bookingPsp.select2("destroy");
         }
-        $bookingPsp.empty();
-        pspOptionsAll.forEach(function(opt) {
-            if (optionMatchesMandant(opt, mandantId)) {
-                $bookingPsp.append(opt.cloneNode(true));
-            }
-        });
-        if (current && current !== "" &&
-            $bookingPsp.find("option").filter(function() { return this.value === current; }).length === 0) {
-            $bookingPsp.append(new Option(current, current, true, true));
-        }
-        if (current) $bookingPsp.val(current);
+        $bookingPsp.html(pspOptionsHTML);
+        pruneByMandant($bookingPsp, mandantId);
 
+        if (current && current !== "") {
+            var hasCurrent = $bookingPsp.find("option").filter(function() { return this.value === current; }).length > 0;
+            if (!hasCurrent) {
+                $bookingPsp.append(new Option(current, current, true, true));
+            }
+            $bookingPsp.val(current);
+        }
         pspSelect2();
     }
 

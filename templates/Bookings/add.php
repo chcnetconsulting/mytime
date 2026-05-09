@@ -59,18 +59,18 @@ $(document).ready(function () {
     const ticketLookupUrl = "<?= $this->Url->build(['action' => 'ticketLookup']) ?>";
     let lastLookupTicket = null;
 
-    const ticketOptionsAll = $ticket.find("option").toArray();
-    const pspOptionsAll = $bookingPsp.find("option").toArray();
+    const ticketOptionsHTML = $ticket.html();
+    const pspOptionsHTML = $bookingPsp.html();
 
     function ticketSelect2() {
         $ticket.select2({
             tags: true,
             templateResult: function(data) {
                 if (!data.element) return data.text;
-                var desc = $(data.element).data('desc');
+                var desc = $(data.element).attr("data-desc");
                 if (!desc) return data.text;
-                var $el = $('<span>').append(document.createTextNode(data.text + ' '));
-                $el.append($('<em>').text(desc));
+                var $el = $("<span>").append(document.createTextNode(data.text + " "));
+                $el.append($("<em>").text(desc));
                 return $el;
             }
         });
@@ -79,39 +79,44 @@ $(document).ready(function () {
         $bookingPsp.select2({ tags: true });
     }
 
-    function optionMatchesMandant(opt, mandantId) {
-        if (!mandantId) return true;
-        var raw = opt.getAttribute("data-mandanten") || "";
-        var ids = raw.split(",").map(function(s) { return s.trim(); }).filter(Boolean);
-        if (ids.length === 0) return false;
-        return ids.indexOf(String(mandantId)) >= 0;
+    function pruneByMandant($select, mandantId) {
+        if (!mandantId) return;
+        $select.find("option").each(function() {
+            var raw = (this.getAttribute("data-mandanten") || "").trim();
+            if (raw === "") {
+                $(this).remove();
+                return;
+            }
+            var ids = raw.split(",").map(function(s) { return s.trim(); }).filter(Boolean);
+            if (ids.indexOf(String(mandantId)) === -1) {
+                $(this).remove();
+            }
+        });
     }
 
-    function applyFilter($select, allOptions, initFn) {
-        var mandantId = $mandant.val();
+    function applyFilter($select, originalHTML, mandantId, initFn) {
         var current = $select.val();
 
         if ($select.hasClass("select2-hidden-accessible")) {
             $select.select2("destroy");
         }
-        $select.empty();
-        allOptions.forEach(function(opt) {
-            if (optionMatchesMandant(opt, mandantId)) {
-                $select.append(opt.cloneNode(true));
-            }
-        });
-        if (current && current !== "" &&
-            $select.find("option").filter(function() { return this.value === current; }).length === 0) {
-            $select.append(new Option(current, current, true, true));
-        }
-        if (current) $select.val(current);
+        $select.html(originalHTML);
+        pruneByMandant($select, mandantId);
 
+        if (current && current !== "") {
+            var hasCurrent = $select.find("option").filter(function() { return this.value === current; }).length > 0;
+            if (!hasCurrent) {
+                $select.append(new Option(current, current, true, true));
+            }
+            $select.val(current);
+        }
         initFn();
     }
 
     function refreshAll() {
-        applyFilter($ticket, ticketOptionsAll, ticketSelect2);
-        applyFilter($bookingPsp, pspOptionsAll, pspSelect2);
+        var mandantId = $mandant.val();
+        applyFilter($ticket, ticketOptionsHTML, mandantId, ticketSelect2);
+        applyFilter($bookingPsp, pspOptionsHTML, mandantId, pspSelect2);
     }
 
     function setSelect2Value(value) {
@@ -125,7 +130,7 @@ $(document).ready(function () {
     }
 
     async function loadTicketDefaults() {
-        const ticket = $ticket.val().trim();
+        const ticket = ($ticket.val() || "").trim();
         if (ticket === "" || ticket === lastLookupTicket) return;
 
         lastLookupTicket = ticket;
