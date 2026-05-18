@@ -142,10 +142,16 @@ $(document).ready(function () {
         if (!payload.found) return;
 
         const booking = payload.booking;
-        $("#description").val(booking.description);
+        if (!$("#description").val()) {
+            $("#description").val(booking.description);
+        }
         $("#minutes").val("");
-        $mandant.val(booking.mandant_id).trigger("change");
-        setSelect2Value(booking.bookingpsp);
+        if (!$mandant.val()) {
+            $mandant.val(booking.mandant_id).trigger("change");
+        }
+        if (!$bookingPsp.val()) {
+            setSelect2Value(booking.bookingpsp);
+        }
     }
 
     ticketSelect2();

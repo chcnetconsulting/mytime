@@ -176,6 +176,15 @@ class BookingsController extends AppController
     public function add()
     {
 	$booking = $this->Bookings->newEmptyEntity();
+        $lastBooking = $this->Bookings->find()
+            ->select(['Bookings.mandant_id'])
+            ->where($this->bookingScopeConditions())
+            ->where(['Bookings.mandant_id IS NOT' => null])
+            ->orderBy(['Bookings.bookingdate' => 'DESC', 'Bookings.id' => 'DESC'])
+            ->first();
+        if ($lastBooking !== null) {
+            $booking->mandant_id = $lastBooking->mandant_id;
+        }
 	$psps = $this->Bookings->find()
             ->select([
                 'bookingpsp',
