@@ -18,10 +18,20 @@ Diese Manifeste deployen MyTime in den Namespace `mytime`.
 
 In allen Dateien `mytime.chcnet.at` ersetzen.
 
-In diesen Dateien das Image ersetzen:
+Das Image kommt aus der privaten Cluster-Registry
+`registry.chcnetconsulting.com` (Push) bzw. cluster-intern `localhost:32000`
+(Pull ohne Auth). In `04-deployment.yaml` und `06-migration-job.yaml` ist das
+Image entsprechend gesetzt:
 
 ```text
-chcnetconsulting/mytime:2.0.0
+localhost:32000/mytime:<tag>
+```
+
+Neues Image bauen und pushen (Prod = amd64):
+
+```bash
+docker buildx build --platform linux/amd64 \
+  -t registry.chcnetconsulting.com/mytime:<tag> --push .
 ```
 
 In `01-configmap.yaml` muss `ENTRA_REDIRECT_URI` zur echten Domain passen:

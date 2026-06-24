@@ -17,7 +17,7 @@ spec:
       restartPolicy: Never
       containers:
         - name: migrations
-          image: chcnetconsulting/mytime:2.0.0
+          image: localhost:32000/mytime:2.1.0
           imagePullPolicy: IfNotPresent
           command:
             - sh
