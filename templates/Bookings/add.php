@@ -130,12 +130,18 @@ $(document).ready(function () {
 
     async function loadTicketDefaults() {
         const ticket = ($ticket.val() || "").trim();
-        if (ticket === "" || ticket === lastLookupTicket) return;
+        const mandantId = $mandant.val() || "";
+        const lookupKey = ticket + "|" + mandantId;
+        if (ticket === "" || lookupKey === lastLookupTicket) return;
 
-        lastLookupTicket = ticket;
-        const response = await fetch(`${ticketLookupUrl}?ticket=${encodeURIComponent(ticket)}`, {
-            headers: { "Accept": "application/json" }
-        });
+        lastLookupTicket = lookupKey;
+        // The lookup is scoped to the active Mandant; the Mandant is never changed
+        // from here, only via the Mandant field below. This avoids booking a ticket
+        // under the wrong Mandant.
+        const response = await fetch(
+            `${ticketLookupUrl}?ticket=${encodeURIComponent(ticket)}&mandant_id=${encodeURIComponent(mandantId)}`,
+            { headers: { "Accept": "application/json" } }
+        );
         if (!response.ok) return;
 
         const payload = await response.json();
@@ -146,19 +152,24 @@ $(document).ready(function () {
             $("#description").val(booking.description);
         }
         $("#minutes").val("");
-        if (!$mandant.val()) {
-            $mandant.val(booking.mandant_id).trigger("change");
-        }
-        if (!$bookingPsp.val()) {
-            setSelect2Value(booking.bookingpsp);
-        }
+        setSelect2Value(booking.bookingpsp);
     }
 
     ticketSelect2();
     pspSelect2();
     $mandant.select2();
 
+    // Show only the active Mandant's tickets/PSPs from the start, so an empty or
+    // brand-new ticket only ever offers data from the active Mandant.
+    refreshAll();
+
     $ticket.on("change", loadTicketDefaults);
-    $mandant.on("change", refreshAll);
+    $mandant.on("change", function () {
+        refreshAll();
+        // After switching Mandant, re-fill the PSP for a ticket that survived the
+        // filter, scoped to the now-active Mandant.
+        lastLookupTicket = null;
+        loadTicketDefaults();
+    });
 });
 </script>

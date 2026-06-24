@@ -176,14 +176,21 @@ class BookingsController extends AppController
     public function add()
     {
 	$booking = $this->Bookings->newEmptyEntity();
-        $lastBooking = $this->Bookings->find()
-            ->select(['Bookings.mandant_id'])
-            ->where($this->bookingScopeConditions())
-            ->where(['Bookings.mandant_id IS NOT' => null])
-            ->orderBy(['Bookings.bookingdate' => 'DESC', 'Bookings.id' => 'DESC'])
-            ->first();
-        if ($lastBooking !== null) {
-            $booking->mandant_id = $lastBooking->mandant_id;
+        $session = $this->request->getSession();
+        $activeMandantId = $session->read('Bookings.activeMandantId');
+        if ($activeMandantId === null) {
+            $lastBooking = $this->Bookings->find()
+                ->select(['Bookings.mandant_id'])
+                ->where($this->bookingScopeConditions())
+                ->where(['Bookings.mandant_id IS NOT' => null])
+                ->orderBy(['Bookings.bookingdate' => 'DESC', 'Bookings.id' => 'DESC'])
+                ->first();
+            if ($lastBooking !== null) {
+                $activeMandantId = $lastBooking->mandant_id;
+            }
+        }
+        if ($activeMandantId !== null) {
+            $booking->mandant_id = (int)$activeMandantId;
         }
 	$psps = $this->Bookings->find()
             ->select([
@@ -212,6 +219,9 @@ class BookingsController extends AppController
             $booking->user_id = parent::currentUserId();
             $booking->group_id = $this->currentGroupId();
             if ($this->Bookings->save($booking)) {
+                if ($booking->mandant_id !== null) {
+                    $session->write('Bookings.activeMandantId', (int)$booking->mandant_id);
+                }
                 $this->Flash->success(__('The booking has been saved.'));
 
                 return $this->redirect(['action' => 'index']);
@@ -232,9 +242,18 @@ class BookingsController extends AppController
                 ->withStringBody(json_encode($payload));
         }
 
-        $booking = $this->Bookings->find()
+        $query = $this->Bookings->find()
             ->where($this->bookingScopeConditions())
-            ->where(['ticket' => $ticket])
+            ->where(['ticket' => $ticket]);
+
+        // Restrict the lookup to the active Mandant so a ticket that also exists
+        // under another Mandant can never pull in that Mandant's PSP.
+        $mandantId = $this->request->getQuery('mandant_id');
+        if ($mandantId !== null && $mandantId !== '' && ctype_digit((string)$mandantId)) {
+            $query->where(['Bookings.mandant_id' => (int)$mandantId]);
+        }
+
+        $booking = $query
             ->orderBy(['bookingdate' => 'DESC', 'id' => 'DESC'])
             ->first();
 
@@ -291,6 +310,9 @@ class BookingsController extends AppController
             $booking->user_id = parent::currentUserId();
             $booking->group_id = $this->currentGroupId();
             if ($this->Bookings->save($booking)) {
+                if ($booking->mandant_id !== null) {
+                    $this->request->getSession()->write('Bookings.activeMandantId', (int)$booking->mandant_id);
+                }
                 $this->Flash->success(__('The booking has been saved.'));
 
                 return $this->redirect(['action' => 'index']);
