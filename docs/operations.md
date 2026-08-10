@@ -33,18 +33,28 @@ bin/cake cache clear_all
 
 ## Produktives Datenbank-Upgrade
 
-Bei bestehenden MyTime-Datenbanken das Produktionsscript verwenden:
+Struktur­änderungen laufen als CakePHP-Migration, im Cluster über den
+Migration-Job:
 
 ```bash
-mysqldump -u <user> -p <database> > backup-before-mytime-upgrade.sql
-mysql -u <user> -p <database> < config/Migrations/mysql_production_upgrade_20260501.sql
-bin/cake migrations status
-bin/cake schema_cache clear
-bin/cake cache clear_all
+kubectl -n mytime delete job mytime-migrations --ignore-not-found
+kubectl apply -f k8s/06-migration-job.yaml
+kubectl -n mytime logs -f job/mytime-migrations
 ```
 
-Erst nach erfolgreichem fachlichem Test sollten die Backup-Tabellen aus dem
-Script entfernt werden.
+Vorher sichern (der nächtliche Job legt ohnehin `pgsql92-mytime.dump` ab):
+
+```bash
+kubectl -n default exec pgsql92-0 -- \
+  pg_dump -U postgres -Fc mytime > mytime-vor-upgrade.dump
+```
+
+Zurückspielen im Notfall:
+
+```bash
+kubectl -n default exec -i pgsql92-0 -- \
+  pg_restore -U postgres -d mytime --clean < mytime-vor-upgrade.dump
+```
 
 ## Logs
 
@@ -119,25 +129,42 @@ bin/cake cache clear_all
 
 Danach `logs/error.log` lesen.
 
-### `Unknown column Users.created`
+### `column users.created does not exist`
 
-Die Datenbank wurde noch nicht auf die neue Struktur gebracht oder der
-Schema-Cache ist veraltet.
-
-Loesung:
+Die Migration ist noch nicht gelaufen oder der Schema-Cache ist veraltet.
 
 ```bash
-mysql -u <user> -p <database> < config/Migrations/mysql_production_upgrade_20260501.sql
+bin/cake migrations status
+bin/cake migrations migrate
 bin/cake schema_cache clear
 bin/cake cache clear_all
 ```
 
-### MySQL-Fehler bei `groups`
+### `duplicate key value violates unique constraint "…_pkey"`
 
-`groups` kann in modernen MySQL-Versionen problematisch sein. In der App sind
-Identifier-Quotes vorgesehen.
+Die Identity-Sequenz hinkt den vorhandenen IDs hinterher — typisch, nachdem
+Daten mit festen IDs eingespielt wurden. PostgreSQL zieht den Zähler dabei
+nicht mit, MySQL tat das.
 
-Pruefen:
+```sql
+SELECT setval(pg_get_serial_sequence('bookings', 'id'),
+              COALESCE((SELECT MAX(id) FROM bookings), 0) + 1, false);
+```
+
+### `pg_hba.conf rejects connection … no encryption`
+
+`DB_SSL`/`DB_SSLMODE` fehlen oder stehen auf `disable`. Spilo nimmt keine
+unverschlüsselten Verbindungen an — in der ConfigMap müssen `DB_SSL=1` und
+`DB_SSLMODE=require` stehen.
+
+### `invalid value for parameter "client_encoding": "utf8mb4"`
+
+Irgendwo steht noch die MySQL-Kodierung. Richtig ist `utf8`.
+
+### Fehler bei `groups`
+
+`groups` ist auch in PostgreSQL kein unproblematischer Name; Identifier werden
+deshalb weiterhin gequotet:
 
 ```bash
 DATABASE_QUOTE_IDENTIFIERS=true

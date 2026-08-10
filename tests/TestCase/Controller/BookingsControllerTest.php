@@ -140,7 +140,7 @@ class BookingsControllerTest extends TestCase
         $this->assertResponseContains('loadTicketDefaults');
         $this->assertResponseContains('$("#minutes").val("");');
         $this->assertResponseContains('id="mandant-id"');
-        $this->assertResponseContains('$("#mandant-id").select2();');
+        $this->assertResponseContains('$mandant.select2();');
     }
 
     public function testTicketLookupReturnsLatestBookingDefaults(): void

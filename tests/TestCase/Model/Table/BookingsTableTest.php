@@ -94,7 +94,11 @@ class BookingsTableTest extends TestCase
         $this->assertNotEmpty($invalid->getError('bookingpsp'));
         $this->assertNotEmpty($invalid->getError('description'));
         $this->assertNotEmpty($invalid->getError('minutes'));
-        $this->assertNotEmpty($invalid->getError('kunde'));
+
+        // "kunde" ist bewusst optional: das Feld wurde aus dem Buchungsformular
+        // entfernt, die Zuordnung laeuft seither ueber mandant_id. Ein leerer
+        // Wert darf deshalb keinen Fehler mehr ausloesen.
+        $this->assertEmpty($invalid->getError('kunde'));
     }
 
     public function testMandantMustExist(): void

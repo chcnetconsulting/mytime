@@ -8,6 +8,7 @@ use Cake\Core\Configure;
 use Cake\Http\Exception\BadRequestException;
 use Cake\Http\Exception\NotFoundException;
 use Cake\I18n\Date;
+use Cake\ORM\Entity;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
@@ -50,6 +51,103 @@ class BookingsController extends AppController
         $parsed = filter_var($raw, FILTER_VALIDATE_INT);
 
         return ($parsed !== false && $parsed > 0) ? $parsed : null;
+    }
+
+    /**
+     * PSP-Auswahlliste: je PSP die Mandanten, unter denen er schon gebucht
+     * wurde, kommasepariert. Das JavaScript in templates/Bookings/{add,edit}.php
+     * splittet diesen String und blendet damit Optionen aus, die nicht zum
+     * gewaehlten Mandanten gehoeren.
+     *
+     * Frueher eine GROUP_CONCAT-Aggregation. Die gibt es in PostgreSQL nicht,
+     * und string_agg haette den Code an einen Dialekt gebunden. Bei rund 500
+     * Buchungen ist das Zusammenfassen in PHP ohnehin billiger als das Aggregat.
+     *
+     * @return array<\Cake\ORM\Entity>
+     */
+    private function pspOptions(): array
+    {
+        $rows = $this->Bookings->find()
+            ->select(['bookingpsp', 'mandant_id'])
+            ->where($this->bookingScopeConditions())
+            ->orderBy(['Bookings.bookingpsp' => 'ASC'])
+            ->disableHydration()
+            ->toArray();
+
+        $byPsp = [];
+        foreach ($rows as $row) {
+            $psp = (string)$row['bookingpsp'];
+            $byPsp[$psp] ??= [];
+            if ($row['mandant_id'] !== null) {
+                $byPsp[$psp][(int)$row['mandant_id']] = true;
+            }
+        }
+
+        $out = [];
+        foreach ($byPsp as $psp => $mandantIds) {
+            $out[] = new Entity([
+                'bookingpsp' => $psp,
+                'mandanten' => implode(',', array_keys($mandantIds)),
+            ], ['markClean' => true]);
+        }
+
+        return $out;
+    }
+
+    /**
+     * Ticket-Auswahlliste: je Ticket die juengste Buchung (Datum, PSP,
+     * Beschreibung) plus alle Mandanten, unter denen es gebucht wurde.
+     *
+     * Ersetzt drei MySQL-Eigenheiten auf einmal: SUBSTRING_INDEX/MAX(CONCAT())
+     * als "letzter Wert je Gruppe", GROUP_CONCAT fuer die Mandantenliste und
+     * den REGEXP-Operator, mit dem Platzhalter-Tickets wie "-" oder "."
+     * herausgefiltert wurden. Keines davon kennt PostgreSQL unter diesem Namen.
+     *
+     * Nebeneffekt: der alte SUBSTRING(..., 11, 50) schnitt die Beschreibung
+     * nach 50 *Bytes* ab und konnte dabei Umlaute zerlegen. Das Kuerzen macht
+     * ohnehin die View mit mb_substr().
+     *
+     * @return array<\Cake\ORM\Entity>
+     */
+    private function ticketOptions(): array
+    {
+        $rows = $this->Bookings->find()
+            ->select(['ticket', 'bookingdate', 'bookingpsp', 'description', 'mandant_id'])
+            ->where($this->bookingScopeConditions())
+            ->orderBy(['Bookings.bookingdate' => 'DESC', 'Bookings.id' => 'DESC'])
+            ->disableHydration()
+            ->toArray();
+
+        $tickets = [];
+        foreach ($rows as $row) {
+            $ticket = (string)$row['ticket'];
+            if (!preg_match('/^[A-Za-z0-9]/', $ticket)) {
+                continue;
+            }
+            if (!isset($tickets[$ticket])) {
+                // Erste gesehene Zeile ist dank der Sortierung die juengste.
+                $tickets[$ticket] = [
+                    'ticket' => $ticket,
+                    'last_date' => $row['bookingdate']?->format('Y-m-d') ?? '',
+                    'last_psp' => (string)$row['bookingpsp'],
+                    'last_desc' => (string)$row['description'],
+                    'mandanten' => [],
+                ];
+            }
+            if ($row['mandant_id'] !== null) {
+                $tickets[$ticket]['mandanten'][(int)$row['mandant_id']] = true;
+            }
+        }
+
+        // Die Reihenfolge stammt aus der Abfrage: das Ticket mit der juengsten
+        // Buchung zuerst — wie das fruehere ORDER BY last_date DESC.
+        $out = [];
+        foreach ($tickets as $data) {
+            $data['mandanten'] = implode(',', array_keys($data['mandanten']));
+            $out[] = new Entity($data, ['markClean' => true]);
+        }
+
+        return $out;
     }
 
     private function exportFilename(string $ext, ?string $mandantName, int $year, int $month): string
@@ -128,14 +226,25 @@ class BookingsController extends AppController
             $query = $this->Bookings->find()
                 ->contain(['Mandanten'])
                 ->leftJoinWith('Mandanten')
-                ->where($this->bookingScopeConditions())
-                ->where([
-                    'OR' => [
-                        'Bookings.bookingpsp like ' => "%{$suche}%",
-                        'Bookings.description like' => "%{$suche}%",
-                        'Mandanten.name like' => "%{$suche}%",
-                    ],
-                ])->orderBy(['Bookings.bookingdate' => 'DESC']);
+                ->where($this->bookingScopeConditions());
+
+            // Beidseitig kleinschreiben, statt sich auf die Kollation zu
+            // verlassen: MySQL suchte mit utf8mb4_*_ci unabhaengig von der
+            // Gross-/Kleinschreibung, PostgreSQLs LIKE ist dagegen immer
+            // exakt. Ohne das hier faende die Suche nach der Umstellung
+            // stillschweigend weniger — ILIKE scheidet aus, weil SQLite (die
+            // Testdatenbank) es nicht kennt.
+            $needle = '%' . mb_strtolower($suche) . '%';
+            $lower = static fn($q, string $field) => $q->func()->lower([$field => 'identifier']);
+            $query->where(function ($exp, $q) use ($lower, $needle) {
+                return $exp->or([
+                    $q->expr()->like($lower($q, 'Bookings.bookingpsp'), $needle),
+                    $q->expr()->like($lower($q, 'Bookings.description'), $needle),
+                    $q->expr()->like($lower($q, 'Mandanten.name'), $needle),
+                ]);
+            });
+
+            $query->orderBy(['Bookings.bookingdate' => 'DESC']);
         } else {
  	    $query = $this->Bookings->find()
                 ->contain(['Mandanten'])
@@ -193,27 +302,8 @@ class BookingsController extends AppController
         if ($activeMandantId !== null) {
             $booking->mandant_id = (int)$activeMandantId;
         }
-	$psps = $this->Bookings->find()
-            ->select([
-                'bookingpsp',
-                'mandanten' => $this->Bookings->query()->newExpr('CAST(GROUP_CONCAT(DISTINCT mandant_id) AS CHAR)'),
-            ])
-            ->where($this->bookingScopeConditions())
-            ->groupBy(['bookingpsp'])
-            ->all();
-        $tickets = $this->Bookings->find()
-            ->select([
-                'ticket',
-                'last_date' => $this->Bookings->query()->func()->max('bookingdate'),
-                'last_psp' => $this->Bookings->query()->newExpr("SUBSTRING_INDEX(MAX(CONCAT(bookingdate, '|', bookingpsp)), '|', -1)"),
-                'last_desc' => $this->Bookings->query()->newExpr('SUBSTRING(MAX(CONCAT(bookingdate, description)), 11, 50)'),
-                'mandanten' => $this->Bookings->query()->newExpr('CAST(GROUP_CONCAT(DISTINCT mandant_id) AS CHAR)'),
-            ])
-            ->where($this->bookingScopeConditions())
-            ->where(['ticket REGEXP' => '^[A-Za-z0-9]'])
-            ->groupBy(['ticket'])
-            ->orderBy(['last_date' => 'DESC'])
-            ->all();
+        $psps = $this->pspOptions();
+        $tickets = $this->ticketOptions();
         $mandanten = $this->Bookings->Mandanten->find('list')->orderBy(['name' => 'ASC'])->all();
         if ($this->request->is('post')) {
             $booking = $this->Bookings->patchEntity($booking, $this->request->getData());
@@ -297,14 +387,7 @@ class BookingsController extends AppController
             ->where($this->bookingScopeConditions())
             ->where(['Bookings.id' => $id])
             ->firstOrFail();
-        $psps = $this->Bookings->find()
-            ->select([
-                'bookingpsp',
-                'mandanten' => $this->Bookings->query()->newExpr('CAST(GROUP_CONCAT(DISTINCT mandant_id) AS CHAR)'),
-            ])
-            ->where($this->bookingScopeConditions())
-            ->groupBy(['bookingpsp'])
-            ->all();
+        $psps = $this->pspOptions();
         $mandanten = $this->Bookings->Mandanten->find('list')->orderBy(['name' => 'ASC'])->all();
         if ($this->request->is(['patch', 'post', 'put'])) {
             $booking = $this->Bookings->patchEntity($booking, $this->request->getData());
@@ -386,12 +469,16 @@ class BookingsController extends AppController
 	$activeWorksheet->getStyle('A1:E1')->getBorders()->getBottom()->setBorderStyle(\PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN);
 		
 
-        $bookingDate = $this->Bookings->aliasField('bookingdate');
-        $dateConditions = function ($exp) use ($bookingDate, $year, $month) {
-            return $exp
-                ->eq("YEAR($bookingDate)", $year)
-                ->eq("MONTH($bookingDate)", $month);
-        };
+        // Bereichsfilter statt YEAR()/MONTH() — datenbank-portabel und nutzt
+        // einen Index auf bookingdate. Dasselbe Muster wie in
+        // TimesheetPdfService, damit Excel- und PDF-Export denselben Monat
+        // auf dieselbe Weise abgrenzen.
+        $firstOfMonth = Date::create($year, $month, 1);
+        $lastOfMonth = $firstOfMonth->lastOfMonth();
+        $dateConditions = [
+            'Bookings.bookingdate >=' => $firstOfMonth->format('Y-m-d'),
+            'Bookings.bookingdate <=' => $lastOfMonth->format('Y-m-d'),
+        ];
 
 	$results = $this->Bookings->find()
              ->where($this->bookingScopeConditions())

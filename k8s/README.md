@@ -13,6 +13,49 @@ Diese Manifeste deployen MyTime in den Namespace `mytime`.
 - `06-migration-job.yaml`: einmaliger CakePHP Migration Job
 - `07-certificate.yaml`: cert-manager Certificate mit ClusterIssuer `le`
 - `08-ingressroute.yaml`: Traefik IngressRoute auf `websecure`
+- `09-mysql.yaml`: **Auslaufmodell** — das alte lokale MySQL. Bleibt bis zum
+  Abbau als Rückweg stehen, die Anwendung spricht es nicht mehr an.
+- `10-import-job.yaml`: **einmalig** — Übernahme der Nutzdaten MySQL → pgsql92
+- `11-db-secret.example.yaml`: Vorlage für das Secret `mytime-db` (Passwort
+  für pgsql92, aus dem Operator-Secret kopiert)
+
+## Datenbank
+
+Die Anwendung nutzt seit Image 2.2.0 den gemeinsamen PostgreSQL-Cluster
+**pgsql92** im Namespace `default` (Zalando-Operator, PostgreSQL 17) statt
+eines eigenen MySQL. Datenbank und Rolle heißen `mytime` und sind im CRD
+`~/dev/infra/k8s/pgsql92/postgresql-cr.yaml` hinterlegt.
+
+Verbindungswerte stehen in `01-configmap.yaml`, das Passwort im eigenen Secret
+`mytime-db`. Dieses wird **imperativ** aus dem Secret gesetzt, das der Operator
+erzeugt — Secrets gelten nur im eigenen Namespace, und
+`enable_cross_namespace_secret` ist aus:
+
+```bash
+PW=$(kubectl -n default get secret \
+       mytime.pgsql92.credentials.postgresql.acid.zalan.do \
+       -o jsonpath='{.data.password}' | base64 -d)
+kubectl -n mytime create secret generic mytime-db --from-literal=DB_PASSWORD="$PW"
+```
+
+⚠ **TLS ist Pflicht, nicht Kür.** Spilo setzt in `pg_hba.conf`
+`hostnossl … reject` und `hostssl … md5`; ohne Verschlüsselung kommt gar keine
+Verbindung zustande. Deshalb `DB_SSL=1` und `DB_SSLMODE=require` in der
+ConfigMap — aber bewusst nicht `verify-*`: das Serverzertifikat ist
+selbstsigniert und wird bei jedem Start neu erzeugt.
+
+⚠ Nach jeder Änderung an ConfigMap oder Secret ist ein Neustart nötig,
+`envFrom` wird im laufenden Betrieb nicht nachgezogen:
+
+```bash
+kubectl -n mytime rollout restart deploy/mytime
+```
+
+Gesichert wird die Datenbank vom nächtlichen CronJob `db-backup` (ns `backup`)
+als `pgsql92-mytime.dump` — ohne Zutun, der Job zieht alle Datenbanken des
+Clusters. Der frühere Eintrag `dump_mysql mytime …` in
+`~/dev/infra/k8s/db-backup/backup.sh` muss beim Abbau von mysql-0 entfernt
+werden, sonst meldet der Job jede Nacht einen Fehler.
 
 ## Vor Deployment anpassen
 

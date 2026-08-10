@@ -10,6 +10,21 @@ data:
   APP_DEFAULT_LOCALE: "de_AT"
   APP_DEFAULT_TIMEZONE: "Europe/Vienna"
   DATABASE_QUOTE_IDENTIFIERS: "true"
+
+  # Datenbank: der gemeinsame PostgreSQL-Cluster pgsql92 (Zalando-Operator,
+  # PostgreSQL 17) im Namespace `default`. Anderer Namespace, deshalb der
+  # vollstaendige Name. `pgsql92` ist der schreibende Dienst (Leader);
+  # `pgsql92-repl` waere die nur lesende Replik.
+  DB_HOST: "pgsql92.default.svc.cluster.local"
+  DB_PORT: "5432"
+  DB_DATABASE: "mytime"
+  DB_USERNAME: "mytime"
+  # Pflicht: Spilo setzt in pg_hba.conf "hostnossl … reject" und
+  # "hostssl … md5" — ohne Verschluesselung kommt keine Verbindung zustande.
+  # Bewusst `require` und nicht `verify-*`: das Serverzertifikat ist
+  # selbstsigniert und wird bei jedem Start neu erzeugt.
+  DB_SSL: "1"
+  DB_SSLMODE: "require"
   OIDC_PROVIDER: "entra"
   ENTRA_REDIRECT_URI: "https://mytime.chcnet.at/auth/callback"
   ENTRA_SCOPE: "openid profile email"

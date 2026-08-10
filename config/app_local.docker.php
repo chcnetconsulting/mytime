@@ -9,21 +9,36 @@ return [
     ],
 
     'Datasources' => [
+        // Ziel ist der gemeinsame PostgreSQL-Cluster pgsql92 im Namespace
+        // `default` des MicroK8s-Clusters (Zalando-Operator, PostgreSQL 17).
+        // Werte kommen aus der ConfigMap mytime-config, das Passwort aus dem
+        // Secret mytime-db — siehe k8s/README.md.
         'default' => [
-            'host' => env('MYSQL_HOST', 'localhost'),
-            'username' => env('MYSQL_USER', 'mytime'),
-            'password' => env('MYSQL_PASS', ''),
-            'database' => env('MYSQL_DB', 'mytime'),
-            'encoding' => env('MYSQL_ENCODING', 'utf8mb4'),
+            'host' => env('DB_HOST', 'pgsql92.default.svc.cluster.local'),
+            'port' => (int)env('DB_PORT', '5432'),
+            'username' => env('DB_USERNAME', 'mytime'),
+            'password' => env('DB_PASSWORD', ''),
+            'database' => env('DB_DATABASE', 'mytime'),
+            'schema' => env('DB_SCHEMA', 'public'),
+            // 'utf8', nicht 'utf8mb4' — s. Begruendung in config/app.php.
+            'encoding' => 'utf8',
+            // Spilo/Zalando setzt in pg_hba.conf "hostnossl … reject" und
+            // "hostssl … md5": ohne Verschluesselung kommt keine Verbindung
+            // zustande. Bewusst 'require' und nicht 'verify-*' — das
+            // Serverzertifikat ist selbstsigniert und wird bei jedem Start
+            // neu erzeugt, eine Pruefung waere eine Zeitbombe.
+            'ssl' => filter_var(env('DB_SSL', true), FILTER_VALIDATE_BOOLEAN),
+            'ssl_mode' => env('DB_SSLMODE', 'require'),
             'quoteIdentifiers' => filter_var(env('DATABASE_QUOTE_IDENTIFIERS', true), FILTER_VALIDATE_BOOLEAN),
             'url' => env('DATABASE_URL', null) ?: null,
         ],
         'test' => [
             'host' => env('DATABASE_TEST_HOST', 'localhost'),
+            'port' => (int)env('DATABASE_TEST_PORT', '5432'),
             'username' => env('DATABASE_TEST_USER', 'mytime'),
             'password' => env('DATABASE_TEST_PASS', ''),
             'database' => env('DATABASE_TEST_NAME', 'mytimetests'),
-            'encoding' => env('DATABASE_TEST_ENCODING', 'utf8mb4'),
+            'encoding' => env('DATABASE_TEST_ENCODING', 'utf8'),
             'quoteIdentifiers' => filter_var(env('DATABASE_TEST_QUOTE_IDENTIFIERS', true), FILTER_VALIDATE_BOOLEAN),
             'url' => env('DATABASE_TEST_URL', env('DATABASE_TEST_HOST') ? null : 'sqlite://127.0.0.1/tmp/tests.sqlite'),
         ],

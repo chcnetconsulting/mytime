@@ -48,9 +48,14 @@ class HomeControllerTest extends TestCase
         $this->get('/home');
 
         $this->assertResponseOk();
-        $this->assertResponseContains('Download Buchungen 9 2025');
+        // Auf das Ziel des Downloads pruefen statt auf seine Beschriftung: die
+        // Monatszeile traegt inzwischen den ausgeschriebenen Monatsnamen, und
+        // der haengt an der eingestellten Sprache. Die URL tut das nicht.
+        $this->assertResponseContains('/bookings/genxls/2025/9');
         $this->assertResponseContains('150 Minuten');
         $this->assertResponseContains('2.5 Stunden');
-        $this->assertResponseNotContains('Download Buchungen 8 2025');
+        // Buchung 3 gehoert einem anderen Nutzer in einer anderen Gruppe —
+        // ihr August darf hier nicht auftauchen.
+        $this->assertResponseNotContains('/bookings/genxls/2025/8');
     }
 }

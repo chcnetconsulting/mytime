@@ -17,7 +17,7 @@ spec:
       restartPolicy: Never
       containers:
         - name: migrations
-          image: localhost:32000/mytime:2.1.0
+          image: localhost:32000/mytime:2.2.0
           imagePullPolicy: IfNotPresent
           command:
             - sh
@@ -28,6 +28,9 @@ spec:
                 name: mytime-config
             - secretRef:
                 name: mytime-secret
+            # Passwort fuer pgsql92, aus dem Operator-Secret kopiert (11-db-secret.example.yaml).
+            - secretRef:
+                name: mytime-db
           volumeMounts:
             - name: tmp
               mountPath: /var/www/html/tmp

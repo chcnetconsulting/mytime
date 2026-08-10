@@ -67,10 +67,10 @@ Mandanten sind eigenstaendige Stammdaten und werden in Buchungen ueber
 
 ## Neue Migrationen
 
-Neue Strukturveraenderungen sollten als CakePHP-Migration in `config/Migrations`
-angelegt werden. Fuer bestehende Produktionstabellen muss zusaetzlich geprueft
-werden, ob `mysql_production_upgrade_20260501.sql` erweitert oder ein neues
-Produktionsscript erstellt werden muss.
+Neue Strukturveraenderungen kommen als CakePHP-Migration nach
+`config/Migrations`. Das Verzeichnis `config/Migrations/archive-mysql/` ist
+reine Historie aus der MySQL-Zeit und wird nicht mehr ausgefuehrt — dort nichts
+ergaenzen.
 
 Nach Migrationen:
 
@@ -88,12 +88,15 @@ Bei neuen Features mindestens diese Ebenen pruefen:
 - Table-Test fuer Validierung und Rules
 - Controller-Test fuer HTTP-Verhalten
 - Auth-/Scope-Test, wenn User-, Gruppen- oder Adminlogik betroffen ist
-- MySQL-Testlauf, wenn Migrationen oder SQL-Details betroffen sind
+- Lauf gegen PostgreSQL zusaetzlich zum SQLite-Standardlauf, wenn Migrationen
+  oder SQL-Details betroffen sind (s. docs/testing.md)
 
 ## Coding-Hinweise
 
 - Bestehende CakePHP-Patterns bevorzugen.
 - Keine Secrets in Code, Tests oder Doku.
 - Fuer Datenbank-Queries ORM und Query Builder bevorzugen.
-- Raw SQL nur fuer Migrationen oder MySQL-spezifische Sonderfaelle.
+- Raw SQL nur fuer Migrationen. Datenbankeigene Funktionen im Anwendungscode
+  vermeiden: die Suite laeuft auf SQLite UND PostgreSQL, und genau das faengt
+  solche Bindungen ab.
 - Bei Buchungsabfragen immer auf Gruppen-/User-Scope achten.
