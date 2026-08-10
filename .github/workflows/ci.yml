@@ -1,11 +1,13 @@
 name: CI
 
 on:
+  # Vorher standen hier die Zweignamen des CakePHP-Grundgerüsts ('4.x', '5.x').
+  # Die gibt es in diesem Repository nicht — der Workflow lief bei keinem
+  # einzigen Push auf main.
   push:
     branches:
-      - '4.x'
-      - '4.next'
-      - '5.x'
+      - main
+      - 'feature/**'
   pull_request:
     branches:
       - '*'
@@ -15,63 +17,80 @@ permissions:
   contents: read
 
 jobs:
+  # Zwei Datenbanken, und beide zählen: SQLite ist schnell und läuft ohne
+  # Server, PostgreSQL ist die Produktionsdatenbank. Der SQLite-Lauf ist dabei
+  # mehr als Bequemlichkeit — er weist nach, dass keine Abfrage einen Dialekt
+  # voraussetzt. Genau daran hing es früher: `ticket REGEXP` ist MySQL-eigen
+  # und liess Teile der Suite auf SQLite gar nicht erst durchlaufen.
   testsuite:
-    runs-on: ubuntu-22.04
+    name: Tests (${{ matrix.db }}, PHP ${{ matrix.php-version }})
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
-        php-version: ['8.1', '8.2']
-        dependencies: ['highest']
-        include:
-          - php-version: '8.1'
-            dependencies: 'lowest'
+        php-version: ['8.3']
+        db: ['sqlite', 'pgsql']
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: mytime
+          POSTGRES_PASSWORD: mytime
+          POSTGRES_DB: mytime_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U mytime"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     steps:
-    - uses: actions/checkout@v7
+      - uses: actions/checkout@v7
 
-    - name: Setup PHP
-      uses: shivammathur/setup-php@v2
-      with:
-        php-version: ${{ matrix.php-version }}
-        extensions: mbstring, intl, pdo_sqlite
-        ini-values: zend.assertions=1
-        coverage: none
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php-version }}
+          extensions: mbstring, intl, pdo_sqlite, pdo_pgsql
+          ini-values: zend.assertions=1
+          coverage: none
 
-    - name: Composer install
-      uses: ramsey/composer-install@v2
-      with:
-        dependency-versions: ${{ matrix.dependencies }}
-        composer-options: ${{ matrix.composer-options }}
+      - name: Composer install
+        uses: ramsey/composer-install@v3
 
-    - name: Composer post install
-      run: composer run-script post-install-cmd --no-interaction
+      - name: Composer post install
+        run: composer run-script post-install-cmd --no-interaction
 
-    - name: Run PHPUnit
-      run: vendor/bin/phpunit
-      env:
-        DATABASE_TEST_URL: sqlite://./testdb.sqlite
+      - name: Run PHPUnit
+        run: vendor/bin/phpunit
+        env:
+          DATABASE_TEST_URL: ${{ matrix.db == 'pgsql'
+            && 'postgres://mytime:mytime@127.0.0.1:5432/mytime_test'
+            || 'sqlite://./testdb.sqlite' }}
 
   coding-standard:
     name: Coding Standard & Static Analysis
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
 
     steps:
-    - uses: actions/checkout@v7
+      - uses: actions/checkout@v7
 
-    - name: Setup PHP
-      uses: shivammathur/setup-php@v2
-      with:
-        php-version: '8.1'
-        extensions: mbstring, intl
-        coverage: none
-        tools: cs2pr, phpstan:1.10
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: mbstring, intl
+          coverage: none
+          tools: cs2pr, phpstan:1.10
 
-    - name: Composer install
-      uses: ramsey/composer-install@v2
+      - name: Composer install
+        uses: ramsey/composer-install@v3
 
-    - name: Run PHP CodeSniffer
-      run: vendor/bin/phpcs --report=checkstyle | cs2pr
+      - name: Run PHP CodeSniffer
+        run: vendor/bin/phpcs --report=checkstyle | cs2pr
 
-    - name: Run phpstan
-      if: always()
-      run: phpstan
+      - name: Run phpstan
+        if: always()
+        run: phpstan
