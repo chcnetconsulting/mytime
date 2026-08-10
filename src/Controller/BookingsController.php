@@ -3,10 +3,11 @@ declare(strict_types=1);
 
 namespace App\Controller;
 
+use App\Service\TimesheetPdfService;
 use Cake\Core\Configure;
 use Cake\Http\Exception\BadRequestException;
+use Cake\Http\Exception\NotFoundException;
 use Cake\I18n\Date;
-use Mpdf\Mpdf;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
@@ -499,99 +500,119 @@ class BookingsController extends AppController
             ->where(['id' => $userId])->first() : null;
         $username = trim(($userRecord?->first_name ?? '') . ' ' . ($userRecord?->last_name ?? ''))
             ?: ($userRecord?->username ?? '');
-        $monthLabel = Date::create($year, $month, 1)->i18nFormat('MMMM yyyy');
-        $title = "timesheet {$username} {$monthLabel}";
-        if ($mandantName !== null) {
-            $title .= " — {$mandantName}";
-        }
-
-        $bookingDate = $this->Bookings->aliasField('bookingdate');
-        $dateConditions = function ($exp) use ($bookingDate, $year, $month) {
-            return $exp
-                ->eq("YEAR($bookingDate)", $year)
-                ->eq("MONTH($bookingDate)", $month);
-        };
-
-        $results = $this->Bookings->find()
-            ->where($this->bookingScopeConditions())
-            ->where($dateConditions)
-            ->where($mandantConditions)
-            ->orderBy(['bookingdate' => 'ASC'])
-            ->toArray();
-
-        $pspResults = $this->Bookings->find()
-            ->where($this->bookingScopeConditions())
-            ->where($dateConditions)
-            ->where($mandantConditions)
-            ->select(['bookingpsp', 'minutes' => $this->Bookings->query()->func()->sum('minutes')])
-            ->groupBy(['bookingpsp'])
-            ->orderBy(['bookingpsp' => 'ASC'])
-            ->toArray();
-
-        $totalMinutes = array_sum(array_map(fn($r) => $r->minutes, $pspResults));
-
-        $html = '
-        <style>
-            body { font-family: sans-serif; font-size: 9pt; }
-            table { width: 100%; border-collapse: collapse; }
-            th { background: #ddd; font-weight: bold; padding: 3px 6px; border-bottom: 2px solid #999; text-align: left; }
-            td { padding: 2px 6px; vertical-align: top; border-bottom: 1px solid #eee; }
-            .right { text-align: right; }
-            .summary { width: 50%; margin-top: 24px; }
-            .total td { font-weight: bold; border-top: 2px solid #666; border-bottom: none; }
-        </style>';
-
-        $html .= '<table>';
-        $html .= '<thead><tr><th>Date</th><th>Ticket</th><th>PSP</th><th>Description</th><th class="right">Minutes</th></tr></thead><tbody>';
-        foreach ($results as $row) {
-            $html .= '<tr>'
-                . '<td>' . h($row->bookingdate->i18nFormat('dd.MM.yyyy')) . '</td>'
-                . '<td>' . h(trim($row->ticket)) . '</td>'
-                . '<td>' . h(trim($row->bookingpsp)) . '</td>'
-                . '<td>' . h(trim($row->description)) . '</td>'
-                . '<td class="right">' . $row->minutes . '</td>'
-                . '</tr>';
-        }
-        $html .= '</tbody></table>';
-
-        $html .= '<table class="summary">';
-        $html .= '<thead><tr><th>Booking PSP</th><th class="right">Minutes</th><th class="right">Hours</th></tr></thead><tbody>';
-        foreach ($pspResults as $row) {
-            $html .= '<tr>'
-                . '<td>' . h($row->bookingpsp) . '</td>'
-                . '<td class="right">' . $row->minutes . '</td>'
-                . '<td class="right">' . round($row->minutes / 60, 2) . '</td>'
-                . '</tr>';
-        }
-        $html .= '<tr class="total">'
-            . '<td>Total</td>'
-            . '<td class="right">' . $totalMinutes . '</td>'
-            . '<td class="right">' . round($totalMinutes / 60, 2) . '</td>'
-            . '</tr>';
-        $html .= '</tbody></table>';
-
-        $mpdf = new Mpdf([
-            'orientation' => 'L',
-            'margin_top'    => 22,
-            'margin_bottom' => 15,
-        ]);
-
-        $mpdf->SetHTMLHeader(
-            '<div style="text-align:center;font-weight:bold;font-size:11pt;">' . h($title) . '</div>'
+        // Gemeinsame PDF-Erzeugung (auch von der REST-API genutzt).
+        $pdf = (new TimesheetPdfService())->render(
+            $year,
+            $month,
+            $this->bookingScopeConditions(),
+            $mandantId,
+            $username,
+            $mandantName
         );
-        $mpdf->SetHTMLFooter(
-            '<div style="text-align:center;font-size:9pt;">- {PAGENO} -</div>'
-        );
-
-        $mpdf->WriteHTML($html);
 
         $filename = $this->exportFilename('pdf', $mandantName, $year, $month);
         $this->response = $this->response
             ->withHeader('Content-Type', 'application/pdf')
             ->withHeader('Content-Disposition', 'attachment; filename="' . $filename . '"')
-            ->withStringBody($mpdf->Output('', 'S'));
+            ->withStringBody($pdf);
 
         return $this->response;
     }
 
+    /**
+     * Approval-PDF (z. B. die "Approved"-Mail des Kunden) für einen Monat
+     * über die Weboberfläche hochladen. Session-Auth; speichert je
+     * User/Mandant/Monat genau einen Datensatz (Upsert) als BLOB.
+     */
+    public function uploadApproval($year, $month)
+    {
+        $this->request->allowMethod(['post']);
+        $year = filter_var($year, FILTER_VALIDATE_INT, ['options' => ['min_range' => 2000, 'max_range' => 2100]]);
+        $month = filter_var($month, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1, 'max_range' => 12]]);
+        if ($year === false || $month === false) {
+            throw new BadRequestException('Invalid period.');
+        }
+
+        $userId = $this->currentUserId();
+        if ($userId === null) {
+            throw new BadRequestException('No user in session.');
+        }
+        $mandantId = $this->queryMandantId();
+
+        $file = $this->request->getUploadedFile('approval');
+        if ($file === null || $file->getError() !== UPLOAD_ERR_OK) {
+            $this->Flash->error('Bitte eine PDF-Datei auswählen.');
+
+            return $this->redirect($this->referer(['action' => 'index']));
+        }
+        $content = (string)$file->getStream()->getContents();
+        if (strncmp($content, '%PDF-', 5) !== 0) {
+            $this->Flash->error('Nur PDF-Dateien werden akzeptiert.');
+
+            return $this->redirect($this->referer(['action' => 'index']));
+        }
+        if (strlen($content) > 16 * 1024 * 1024) {
+            $this->Flash->error('Datei zu groß (max. 16 MB).');
+
+            return $this->redirect($this->referer(['action' => 'index']));
+        }
+        $filename = (string)($file->getClientFilename() ?: 'approval.pdf');
+        if (!preg_match('/\.pdf$/i', $filename)) {
+            $filename .= '.pdf';
+        }
+
+        $Approvals = $this->fetchTable('Approvals');
+        $existing = $Approvals->findForPeriod($userId, $mandantId, $year, $month)->first();
+        $approval = $existing ?? $Approvals->newEmptyEntity();
+        $approval = $Approvals->patchEntity($approval, [
+            'user_id' => $userId,
+            'mandant_id' => $mandantId,
+            'year' => $year,
+            'month' => $month,
+            'filename' => $filename,
+            'mime' => 'application/pdf',
+            'content' => $content,
+            'byte_size' => strlen($content),
+            'uploaded_by' => (string)($this->currentUser()['email'] ?? 'web'),
+        ]);
+
+        if ($Approvals->save($approval)) {
+            $this->Flash->success('Approval gespeichert.');
+        } else {
+            $this->Flash->error('Approval konnte nicht gespeichert werden.');
+        }
+
+        return $this->redirect($this->referer(['action' => 'index']));
+    }
+
+    /**
+     * Gespeichertes Approval-PDF eines Monats herunterladen (Session-Auth).
+     */
+    public function downloadApproval($year, $month)
+    {
+        $year = filter_var($year, FILTER_VALIDATE_INT, ['options' => ['min_range' => 2000, 'max_range' => 2100]]);
+        $month = filter_var($month, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1, 'max_range' => 12]]);
+        if ($year === false || $month === false) {
+            throw new BadRequestException('Invalid period.');
+        }
+        $userId = $this->currentUserId();
+        if ($userId === null) {
+            throw new BadRequestException('No user in session.');
+        }
+        $mandantId = $this->queryMandantId();
+
+        $approval = $this->fetchTable('Approvals')
+            ->findForPeriod($userId, $mandantId, $year, $month)
+            ->select(['filename', 'mime', 'content'])
+            ->first();
+        if ($approval === null) {
+            throw new NotFoundException('Kein Approval für diesen Monat gespeichert.');
+        }
+
+        // BLOB kommt beim Lesen als Stream-Resource zurück → in String wandeln.
+        return $this->response
+            ->withType($approval->mime ?: 'application/pdf')
+            ->withHeader('Content-Disposition', 'attachment; filename="' . $approval->filename . '"')
+            ->withStringBody(\App\Controller\ApiController::binaryToString($approval->content));
+    }
 }

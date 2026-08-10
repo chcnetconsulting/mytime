@@ -48,6 +48,24 @@
                 &nbsp;
                 <a href="/bookings/genpdf/<?= $b->year . '/' . $b->month . $mandantQuery ?>" title="PDF <?= h($label) ?>">&#x2B07; PDF</a>
             </td>
+            <td class="approval-cell">
+                <?php if (!empty($b->approval)): ?>
+                    <a href="/bookings/download-approval/<?= $b->year . '/' . $b->month . $mandantQuery ?>"
+                       title="Approval <?= h($b->approval) ?>">&#x2705; Approval</a>
+                <?php endif; ?>
+                <?= $this->Form->create(null, [
+                    'url' => '/bookings/upload-approval/' . $b->year . '/' . $b->month . $mandantQuery,
+                    'type' => 'file',
+                    'style' => 'display:inline-block;margin-left:8px',
+                ]) ?>
+                <?= $this->Form->file('approval', ['accept' => 'application/pdf', 'required' => true, 'style' => 'width:150px']) ?>
+                <?= $this->Form->button($b->approval ? '&#x21bb;' : '&#x2b06;', [
+                    'escapeTitle' => false,
+                    'title' => $b->approval ? 'Approval ersetzen' : 'Approval hochladen',
+                    'class' => 'toggle-btn',
+                ]) ?>
+                <?= $this->Form->end() ?>
+            </td>
         </tr>
         <tr class="psp-detail" id="psp-<?= $i ?>">
             <td></td>

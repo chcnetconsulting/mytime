@@ -19,6 +19,16 @@ return [
     'debug' => filter_var(env('DEBUG', false), FILTER_VALIDATE_BOOLEAN),
 
     /*
+     * MyTime-spezifische Einstellungen.
+     * - apiToken: Bearer-Token für die REST-API (/api/*). Ist er leer, ist die
+     *   API komplett deaktiviert (liefert 404). Nie ins Repo committen — nur
+     *   über MYTIME_API_TOKEN (env/Secret) setzen.
+     */
+    'Mytime' => [
+        'apiToken' => env('MYTIME_API_TOKEN', ''),
+    ],
+
+    /*
      * Configure basic information about the application.
      *
      * - namespace - The namespace to find app classes under.

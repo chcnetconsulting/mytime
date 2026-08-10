@@ -78,6 +78,27 @@ return function (RouteBuilder $routes): void {
     });
 
     /*
+     * REST-API (Bearer-Token statt OIDC-Session, siehe ApiController).
+     *   GET  /api/timesheet/{year}/{month}
+     *   GET  /api/approval/{year}/{month}   (Download)
+     *   POST /api/approval/{year}/{month}   (Upload/Upsert)
+     *   GET  /api/approvals
+     */
+    $routes->scope('/api', function (RouteBuilder $builder): void {
+        $builder->connect(
+            '/timesheet/{year}/{month}',
+            ['controller' => 'Api', 'action' => 'timesheet']
+        )->setPass(['year', 'month'])->setPatterns(['year' => '\d{4}', 'month' => '\d{1,2}']);
+
+        $builder->connect(
+            '/approval/{year}/{month}',
+            ['controller' => 'Api', 'action' => 'approval']
+        )->setPass(['year', 'month'])->setPatterns(['year' => '\d{4}', 'month' => '\d{1,2}']);
+
+        $builder->connect('/approvals', ['controller' => 'Api', 'action' => 'approvals']);
+    });
+
+    /*
      * If you need a different set of middleware or none at all,
      * open new scope and define routes there.
      *

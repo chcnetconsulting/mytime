@@ -118,6 +118,12 @@ class AppController extends Controller
             return null;
         }
 
+        // Die REST-API authentifiziert per Bearer-Token (ApiController::beforeFilter),
+        // nicht über die OIDC-Session — daher hier nicht zum Login umleiten.
+        if ($this->request->getParam('controller') === 'Api') {
+            return null;
+        }
+
         if ($this->request->getSession()->check('Auth.User')) {
             return null;
         }
