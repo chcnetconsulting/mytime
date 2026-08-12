@@ -67,7 +67,7 @@ class AuthControllerTest extends TestCase
         $location = $this->_response->getHeaderLine('Location');
         $this->assertStringStartsWith(
             'https://login.microsoftonline.com/' . self::TEST_TENANT_ID . '/oauth2/v2.0/authorize?',
-            $location
+            $location,
         );
         $this->assertStringContainsString('client_id=entra-client', $location);
         $this->assertStringContainsString('redirect_uri=http%3A%2F%2Flocalhost%3A8765%2Fauth%2Fcallback', $location);
@@ -91,7 +91,7 @@ class AuthControllerTest extends TestCase
         $location = $this->_response->getHeaderLine('Location');
         $this->assertStringStartsWith(
             'https://keycloak.example.test/realms/mytime/protocol/openid-connect/auth?',
-            $location
+            $location,
         );
         $this->assertStringContainsString('client_id=keycloak-client', $location);
     }
@@ -109,7 +109,7 @@ class AuthControllerTest extends TestCase
         $location = $this->_response->getHeaderLine('Location');
         $this->assertStringStartsWith(
             'https://accounts.google.com/o/oauth2/v2/auth?',
-            $location
+            $location,
         );
         $this->assertStringContainsString('client_id=google-client', $location);
     }

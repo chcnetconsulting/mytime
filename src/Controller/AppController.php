@@ -16,8 +16,8 @@ declare(strict_types=1);
  */
 namespace App\Controller;
 
-use Cake\Core\Configure;
 use Cake\Controller\Controller;
+use Cake\Core\Configure;
 use Cake\Event\EventInterface;
 
 /**
@@ -30,6 +30,11 @@ use Cake\Event\EventInterface;
  */
 class AppController extends Controller
 {
+    /**
+     * Der angemeldete Benutzer aus der Session.
+     *
+     * @return array<string, mixed>|null
+     */
     protected function currentUser(): ?array
     {
         $user = $this->request->getSession()->read('Auth.User');
@@ -37,6 +42,9 @@ class AppController extends Controller
         return is_array($user) ? $user : null;
     }
 
+    /**
+     * Id des angemeldeten Benutzers, sofern eine Session besteht.
+     */
     protected function currentUserId(): ?int
     {
         $user = $this->currentUser();
@@ -44,6 +52,9 @@ class AppController extends Controller
         return empty($user['id']) ? null : (int)$user['id'];
     }
 
+    /**
+     * Gruppe des angemeldeten Benutzers; entscheidet ueber gemeinsam nutzbare Buchungen.
+     */
     protected function currentGroupId(): ?int
     {
         $userId = $this->currentUserId();
@@ -59,6 +70,9 @@ class AppController extends Controller
         return empty($user?->group_id) ? null : (int)$user->group_id;
     }
 
+    /**
+     * Admin ist, wer als Entra-Besitzer eingetragen ist oder is_admin gesetzt hat.
+     */
     protected function currentUserIsAdmin(): bool
     {
         $user = $this->currentUser();
@@ -84,7 +98,7 @@ class AppController extends Controller
         return (bool)($record?->is_admin ?? false);
     }
 
-	/**
+    /**
      * Initialization hook method.
      *
      * Use this method to add common initialization code like loading components.
@@ -106,6 +120,10 @@ class AppController extends Controller
         //$this->loadComponent('FormProtection');
     }
 
+    /**
+     * @param \Cake\Event\EventInterface $event The beforeFilter event.
+     * @return \Cake\Http\Response|null
+     */
     public function beforeFilter(EventInterface $event)
     {
         parent::beforeFilter($event);

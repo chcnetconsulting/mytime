@@ -13,6 +13,11 @@ use Cake\Http\Exception\InternalErrorException;
  */
 class AuthController extends AppController
 {
+    /**
+     * Leitet zum Authorize-Endpunkt des konfigurierten OIDC-Providers.
+     *
+     * @return \Cake\Http\Response|null
+     */
     public function login()
     {
         $config = $this->oidcConfig();
@@ -35,6 +40,11 @@ class AuthController extends AppController
         return $this->redirect($config['authorizeUrl'] . '?' . $query);
     }
 
+    /**
+     * Nimmt den Redirect des Providers entgegen, prueft State und Claims.
+     *
+     * @return \Cake\Http\Response|null
+     */
     public function callback()
     {
         $session = $this->request->getSession();
@@ -68,6 +78,11 @@ class AuthController extends AppController
         return $this->redirect(['controller' => 'Home', 'action' => 'index']);
     }
 
+    /**
+     * Beendet die Session und leitet zum Logout des Providers, falls konfiguriert.
+     *
+     * @return \Cake\Http\Response|null
+     */
     public function logout()
     {
         $this->request->getSession()->delete('Auth.User');
@@ -209,7 +224,7 @@ class AuthController extends AppController
             $parts[0] . '.' . $parts[1],
             $this->base64UrlDecode($parts[2]),
             $publicKey,
-            OPENSSL_ALGO_SHA256
+            OPENSSL_ALGO_SHA256,
         );
 
         if ($valid !== 1) {
@@ -244,11 +259,11 @@ class AuthController extends AppController
     {
         $rsaPublicKey = $this->asn1Sequence(
             $this->asn1Integer($this->base64UrlDecode($key['n']))
-            . $this->asn1Integer($this->base64UrlDecode($key['e']))
+            . $this->asn1Integer($this->base64UrlDecode($key['e'])),
         );
         $algorithm = $this->asn1Sequence("\x06\x09\x2a\x86\x48\x86\xf7\x0d\x01\x01\x01\x05\x00");
         $subjectPublicKeyInfo = $this->asn1Sequence(
-            $algorithm . "\x03" . $this->asn1Length(strlen($rsaPublicKey) + 1) . "\x00" . $rsaPublicKey
+            $algorithm . "\x03" . $this->asn1Length(strlen($rsaPublicKey) + 1) . "\x00" . $rsaPublicKey,
         );
 
         return "-----BEGIN PUBLIC KEY-----\n"
@@ -256,6 +271,9 @@ class AuthController extends AppController
             . "-----END PUBLIC KEY-----\n";
     }
 
+    /**
+     * Verpackt einen Wert als ASN.1-INTEGER (fuer die ES256-Signaturpruefung).
+     */
     private function asn1Integer(string $value): string
     {
         $value = ltrim($value, "\x00");
@@ -266,11 +284,17 @@ class AuthController extends AppController
         return "\x02" . $this->asn1Length(strlen($value)) . $value;
     }
 
+    /**
+     * Verpackt einen Wert als ASN.1-SEQUENCE.
+     */
     private function asn1Sequence(string $value): string
     {
         return "\x30" . $this->asn1Length(strlen($value)) . $value;
     }
 
+    /**
+     * Kodiert eine ASN.1-Laengenangabe (kurze oder lange Form).
+     */
     private function asn1Length(int $length): string
     {
         if ($length < 128) {
@@ -351,6 +375,9 @@ class AuthController extends AppController
         return $users->saveOrFail($user);
     }
 
+    /**
+     * base64url nach RFC 7515 - ohne Padding, mit - und _ statt + und /.
+     */
     private function base64UrlDecode(string $value): string
     {
         $decoded = strtr($value, '-_', '+/');

@@ -59,5 +59,4 @@ session_id('cli');
 //
 // Will rebuild the database if the migration state differs
 // from the migration history in files.
-//
 (new Migrator())->run();

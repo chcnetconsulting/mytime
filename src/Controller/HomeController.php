@@ -5,14 +5,20 @@ namespace App\Controller;
 
 use Cake\Core\Configure;
 use Cake\ORM\Locator\LocatorAwareTrait;
+
 /**
  * Home Controller
- *
  */
 class HomeController extends AppController
 {
     use LocatorAwareTrait;
 
+    /**
+     * Sichtbarkeits-Bedingung der Uebersicht: Gruppe vor Benutzer, wie in
+     * BookingsController::bookingScopeConditions().
+     *
+     * @return array<string, mixed>
+     */
     private function groupScopeCondition(): array
     {
         if (Configure::read('Auth.disabled') && $this->currentUserId() === null) {

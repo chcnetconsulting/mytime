@@ -29,7 +29,7 @@ class TimesheetPdfService
         array $scopeConditions,
         ?int $mandantId,
         string $username,
-        ?string $mandantName
+        ?string $mandantName,
     ): string {
         $bookings = $this->fetchTable('Bookings');
 
@@ -71,7 +71,8 @@ class TimesheetPdfService
         <style>
             body { font-family: sans-serif; font-size: 9pt; }
             table { width: 100%; border-collapse: collapse; }
-            th { background: #ddd; font-weight: bold; padding: 3px 6px; border-bottom: 2px solid #999; text-align: left; }
+            th { background: #ddd; font-weight: bold; padding: 3px 6px;
+                 border-bottom: 2px solid #999; text-align: left; }
             td { padding: 2px 6px; vertical-align: top; border-bottom: 1px solid #eee; }
             .right { text-align: right; }
             .summary { width: 50%; margin-top: 24px; }
@@ -111,7 +112,7 @@ class TimesheetPdfService
             'margin_bottom' => 15,
         ]);
         $mpdf->SetHTMLHeader(
-            '<div style="text-align:center;font-weight:bold;font-size:11pt;">' . h($title) . '</div>'
+            '<div style="text-align:center;font-weight:bold;font-size:11pt;">' . h($title) . '</div>',
         );
         $mpdf->SetHTMLFooter('<div style="text-align:center;font-size:9pt;">- {PAGENO} -</div>');
         $mpdf->WriteHTML($html);
@@ -122,8 +123,14 @@ class TimesheetPdfService
     /**
      * Einheitlicher Dateiname für Export und API.
      */
-    public function filename(?string $mandantName, ?string $first, ?string $last, ?string $username, int $year, int $month): string
-    {
+    public function filename(
+        ?string $mandantName,
+        ?string $first,
+        ?string $last,
+        ?string $username,
+        int $year,
+        int $month,
+    ): string {
         $sanitize = static fn(string $s): string => trim(preg_replace('/[^A-Za-z0-9._-]+/', '-', $s) ?? '', '-');
 
         $first = trim((string)$first);

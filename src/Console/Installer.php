@@ -128,7 +128,7 @@ class Installer
                 '<info>Set Folder Permissions ? (Default to Y)</info> [<comment>Y,n</comment>]? ',
                 $validator,
                 10,
-                'Y'
+                'Y',
             );
 
             if (in_array($setFolderPermissions, ['n', 'N'])) {
@@ -153,7 +153,6 @@ class Installer
         };
 
         $walker = function (string $dir) use (&$walker, $changePerms): void {
-            /** @phpstan-ignore-next-line */
             $files = array_diff(scandir($dir), ['.', '..']);
             foreach ($files as $file) {
                 $path = $dir . '/' . $file;

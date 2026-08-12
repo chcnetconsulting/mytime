@@ -27,6 +27,7 @@ use Cake\Http\MiddlewareQueue;
 use Cake\ORM\Locator\TableLocator;
 use Cake\Routing\Middleware\AssetMiddleware;
 use Cake\Routing\Middleware\RoutingMiddleware;
+
 /**
  * Application setup class.
  *
@@ -45,14 +46,14 @@ class Application extends BaseApplication
     public function bootstrap(): void
     {
         // Call parent to load bootstrap from files.
-	parent::bootstrap();
+        parent::bootstrap();
 
         if (PHP_SAPI === 'cli') {
             $this->bootstrapCli();
         } else {
             FactoryLocator::add(
                 'Table',
-                (new TableLocator())->allowFallbackClass(false)
+                (new TableLocator())->allowFallbackClass(false),
             );
         }
 
@@ -95,7 +96,6 @@ class Application extends BaseApplication
             // available as array through $request->getData()
             // https://book.cakephp.org/4/en/controllers/middleware.html#body-parser-middleware
             ->add(new BodyParserMiddleware())
-
 
             // Cross Site Request Forgery (CSRF) Protection Middleware
             // https://book.cakephp.org/4/en/security/csrf.html#cross-site-request-forgery-csrf-middleware

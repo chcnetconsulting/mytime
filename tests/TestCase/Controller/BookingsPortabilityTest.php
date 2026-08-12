@@ -5,6 +5,7 @@ namespace App\Test\TestCase\Controller;
 
 use Cake\TestSuite\IntegrationTestTrait;
 use Cake\TestSuite\TestCase;
+use PhpOffice\PhpSpreadsheet\IOFactory;
 
 /**
  * Prueft die Stellen, an denen BookingsController frueher MySQL-eigene
@@ -324,7 +325,7 @@ class BookingsPortabilityTest extends TestCase
         file_put_contents($file, $body);
 
         try {
-            $sheet = \PhpOffice\PhpSpreadsheet\IOFactory::load($file)->getActiveSheet();
+            $sheet = IOFactory::load($file)->getActiveSheet();
             $tickets = [];
             foreach ($sheet->getRowIterator(2) as $row) {
                 $value = (string)$sheet->getCell('B' . $row->getRowIndex())->getValue();
@@ -335,7 +336,9 @@ class BookingsPortabilityTest extends TestCase
 
             return $tickets;
         } finally {
-            @unlink($file);
+            if (is_file($file)) {
+                unlink($file);
+            }
         }
     }
 }
