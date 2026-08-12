@@ -24,6 +24,41 @@ class AuthControllerTest extends TestCase
         'app.Bookings',
     ];
 
+    /**
+     * Der OIDC-Block steht in config/app_local.php, und die Datei ist nicht im
+     * Repository. Auf dem CI-Runner existiert sie nicht — die Tests liefen dort
+     * in einen 500 ("Missing OIDC provider configuration"), waehrend sie lokal
+     * gruen waren, weil sie die echten Entra-Werte des Entwicklungsrechners
+     * benutzten. Die Konfiguration bringen sie deshalb selbst mit.
+     */
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        Configure::write('Oidc.provider', 'entra');
+        Configure::write('Oidc.providers.entra', [
+            'label' => 'Microsoft Entra ID',
+            'tenantId' => self::TEST_TENANT_ID,
+            'clientId' => 'entra-client',
+            'clientSecret' => 'entra-secret',
+            'redirectUri' => 'http://localhost:8765/auth/callback',
+            'scope' => 'openid profile email',
+        ]);
+        // Google leitet seine URLs nicht aus einem Issuer ab, sie stehen sonst
+        // vollstaendig in app_local.php.
+        Configure::write('Oidc.providers.google', [
+            'label' => 'Google',
+            'issuer' => 'https://accounts.google.com',
+            'redirectUri' => 'http://localhost:8765/auth/callback',
+            'scope' => 'openid profile email',
+            'authorizeUrl' => 'https://accounts.google.com/o/oauth2/v2/auth',
+            'tokenUrl' => 'https://oauth2.googleapis.com/token',
+            'keysUrl' => 'https://www.googleapis.com/oauth2/v3/certs',
+        ]);
+    }
+
+    private const TEST_TENANT_ID = '11111111-2222-3333-4444-555555555555';
+
     public function testLoginRedirectsToMicrosoftAuthorizeEndpoint(): void
     {
         $this->get('/auth/login');
@@ -31,10 +66,10 @@ class AuthControllerTest extends TestCase
         $this->assertResponseCode(302);
         $location = $this->_response->getHeaderLine('Location');
         $this->assertStringStartsWith(
-            'https://login.microsoftonline.com/33a356e1-74b6-4bc3-9ef5-dd68c5d83998/oauth2/v2.0/authorize?',
+            'https://login.microsoftonline.com/' . self::TEST_TENANT_ID . '/oauth2/v2.0/authorize?',
             $location
         );
-        $this->assertStringContainsString('client_id=967fec6d-e828-4c8d-87b8-0a15421cb74d', $location);
+        $this->assertStringContainsString('client_id=entra-client', $location);
         $this->assertStringContainsString('redirect_uri=http%3A%2F%2Flocalhost%3A8765%2Fauth%2Fcallback', $location);
         $this->assertStringContainsString('scope=openid+profile+email', $location);
     }
