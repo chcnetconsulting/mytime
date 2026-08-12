@@ -17,7 +17,7 @@ spec:
       restartPolicy: Never
       containers:
         - name: migrations
-          image: localhost:32000/mytime:2.2.0
+          image: localhost:32000/mytime:2.3.0
           imagePullPolicy: IfNotPresent
           command:
             - sh

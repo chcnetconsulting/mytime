@@ -184,6 +184,57 @@ class BookingsController extends AppController
     }
 
     /**
+     * Stundenuebersicht des laufenden Monats fuer die Index-Seite: je
+     * Booking-PSP die Summe der Minuten plus Gesamtsumme, eingeschraenkt auf
+     * den gewaehlten Mandanten.
+     *
+     * Bereichsfilter auf bookingdate statt YEAR()/MONTH() — dasselbe
+     * portable Muster wie in genxls() und TimesheetPdfService, damit alle
+     * drei denselben Monat auf dieselbe Weise abgrenzen.
+     *
+     * @return array{year:int,month:int,label:string,psps:array<int,array{bookingpsp:string,minutes:int}>,totalMinutes:int}
+     */
+    private function currentMonthSummary(?int $mandantId): array
+    {
+        $firstOfMonth = Date::today()->firstOfMonth();
+        $lastOfMonth = $firstOfMonth->lastOfMonth();
+
+        $query = $this->Bookings->find()
+            ->where($this->bookingScopeConditions())
+            ->where([
+                'Bookings.bookingdate >=' => $firstOfMonth->format('Y-m-d'),
+                'Bookings.bookingdate <=' => $lastOfMonth->format('Y-m-d'),
+            ])
+            ->select([
+                'bookingpsp',
+                'minutes' => $this->Bookings->query()->func()->sum('minutes'),
+            ])
+            ->groupBy(['Bookings.bookingpsp'])
+            ->orderBy(['Bookings.bookingpsp' => 'ASC'])
+            ->disableHydration();
+
+        if ($mandantId !== null) {
+            $query->where(['Bookings.mandant_id' => $mandantId]);
+        }
+
+        $psps = [];
+        $totalMinutes = 0;
+        foreach ($query->toArray() as $row) {
+            $minutes = (int)$row['minutes'];
+            $psps[] = ['bookingpsp' => (string)$row['bookingpsp'], 'minutes' => $minutes];
+            $totalMinutes += $minutes;
+        }
+
+        return [
+            'year' => (int)$firstOfMonth->year,
+            'month' => (int)$firstOfMonth->month,
+            'label' => $firstOfMonth->i18nFormat('MMMM yyyy'),
+            'psps' => $psps,
+            'totalMinutes' => $totalMinutes,
+        ];
+    }
+
+    /**
      * Index method
      *
      * @return \Cake\Http\Response|null|void Renders view
@@ -258,7 +309,8 @@ class BookingsController extends AppController
 
         $this->set('suche', $suche);
 	$bookings = $this->paginate($query);
-        $this->set(compact('bookings', 'mandanten', 'selectedMandantId'));
+        $monthSummary = $this->currentMonthSummary($selectedMandantId);
+        $this->set(compact('bookings', 'mandanten', 'selectedMandantId', 'monthSummary'));
     }
 
     /**

@@ -91,6 +91,79 @@ class BookingsControllerTest extends TestCase
     }
 
     /**
+     * Legt eine Buchung im laufenden Monat an — die Fixtures liegen bewusst
+     * in der Vergangenheit, die Monatsuebersicht braucht aber "heute".
+     */
+    private function addCurrentMonthBooking(string $psp, int $minutes, int $mandantId = 1): void
+    {
+        $bookings = $this->getTableLocator()->get('Bookings');
+        $bookings->saveOrFail($bookings->newEntity([
+            'user_id' => 1,
+            'group_id' => 1,
+            'mandant_id' => $mandantId,
+            'bookingdate' => \Cake\I18n\Date::today()->firstOfMonth()->format('Y-m-d'),
+            'ticket' => 'MYT-CUR',
+            'bookingpsp' => $psp,
+            'description' => 'Current month work',
+            'minutes' => $minutes,
+            'kunde' => 'ACME',
+        ]));
+    }
+
+    public function testIndexShowsCurrentMonthSummaryPerPsp(): void
+    {
+        $this->addCurrentMonthBooking('PSP-CORE', 90);
+        $this->addCurrentMonthBooking('PSP-CORE', 30);
+        $this->addCurrentMonthBooking('PSP-EXTRA', 60);
+
+        $this->get('/bookings');
+
+        $this->assertResponseOk();
+        $this->assertResponseContains('Stunden ' . \Cake\I18n\Date::today()->i18nFormat('MMMM yyyy'));
+        // PSP-CORE 120 min = 2,00 h; PSP-EXTRA 60 min = 1,00 h; Total 180 min = 3,00 h
+        $this->assertResponseContains('2,00 h');
+        $this->assertResponseContains('1,00 h');
+        $this->assertResponseContains('3,00 h');
+        $this->assertResponseContains('Total');
+    }
+
+    public function testCurrentMonthSummaryRespectsMandantFilter(): void
+    {
+        $this->addCurrentMonthBooking('PSP-CORE', 120, 1);
+        $this->addCurrentMonthBooking('PSP-GLOBEX', 60, 2);
+
+        $this->get('/bookings?mandant_id=2');
+
+        $this->assertResponseOk();
+        $this->assertResponseContains('PSP-GLOBEX');
+        // Nur die Globex-Buchung zaehlt: 60 min = 1,00 h.
+        $this->assertResponseContains('1,00 h');
+        $this->assertResponseNotContains('2,00 h');
+    }
+
+    public function testCurrentMonthSummaryIgnoresOtherUsersBookings(): void
+    {
+        $bookings = $this->getTableLocator()->get('Bookings');
+        $bookings->saveOrFail($bookings->newEntity([
+            'user_id' => 3,
+            'group_id' => 2,
+            'mandant_id' => 1,
+            'bookingdate' => \Cake\I18n\Date::today()->firstOfMonth()->format('Y-m-d'),
+            'ticket' => 'MYT-OTHER',
+            'bookingpsp' => 'PSP-FOREIGN',
+            'description' => 'Foreign work',
+            'minutes' => 600,
+            'kunde' => 'ACME',
+        ]));
+
+        $this->get('/bookings');
+
+        $this->assertResponseOk();
+        $this->assertResponseNotContains('PSP-FOREIGN');
+        $this->assertResponseContains('Keine Buchungen in diesem Monat.');
+    }
+
+    /**
      * Test view method
      *
      * @return void
