@@ -4,6 +4,8 @@ declare(strict_types=1);
 namespace App\Test\TestCase\Model\Table;
 
 use App\Model\Table\ApprovalsTable;
+use Cake\Database\Driver\Postgres;
+use Cake\Database\Exception\QueryException;
 use Cake\TestSuite\TestCase;
 
 /**
@@ -85,7 +87,7 @@ class ApprovalsTableTest extends TestCase
     {
         $content = "%PDF-1.7\n"
             . "\x00\x01\x02\xFF\xFE"
-            . "\\r\\n literal backslash-r-n"
+            . '\\r\\n literal backslash-r-n'
             . "\r\n echte Zeilenschaltung"
             . random_bytes(512)
             . "\n%%EOF";
@@ -149,13 +151,13 @@ class ApprovalsTableTest extends TestCase
     public function testSecondApprovalWithoutMandantIsRejected(): void
     {
         $connection = $this->Approvals->getConnection();
-        if (!$connection->getDriver() instanceof \Cake\Database\Driver\Postgres) {
+        if (!$connection->getDriver() instanceof Postgres) {
             $this->markTestSkipped('Teilindex nur auf PostgreSQL — dort laeuft auch die Produktion.');
         }
 
         $this->saveApproval('erstes', null);
 
-        $this->expectException(\Cake\Database\Exception\QueryException::class);
+        $this->expectException(QueryException::class);
         $this->saveApproval('zweites', null);
     }
 

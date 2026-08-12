@@ -11,7 +11,9 @@ use Cake\Database\Connection;
 use Cake\Database\Driver\Mysql;
 use Cake\Database\Driver\Postgres;
 use Cake\Datasource\ConnectionManager;
+use ReflectionClass;
 use RuntimeException;
+use Throwable;
 
 /**
  * Uebernimmt die Nutzdaten einmalig aus der alten MySQL-Datenbank in die neue
@@ -141,7 +143,7 @@ class ImportMysqlCommand extends Command
                     . 'TRUNCATE %s RESTART IDENTITY CASCADE;',
                     $table,
                     $targetRows,
-                    implode(', ', array_reverse(self::TABLES))
+                    implode(', ', array_reverse(self::TABLES)),
                 ));
 
                 return static::CODE_ERROR;
@@ -169,7 +171,7 @@ class ImportMysqlCommand extends Command
                         'Tabelle "%s": %d Zeilen übernommen, erwartet waren %d.',
                         $table,
                         $copied,
-                        $plan[$table]['expected']
+                        $plan[$table]['expected'],
                     ));
                 }
                 $io->success(sprintf('  %-12s %5d Zeilen übernommen', $table, $copied));
@@ -181,7 +183,7 @@ class ImportMysqlCommand extends Command
             }
 
             $target->commit();
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             $target->rollback();
             $io->error('Import abgebrochen, nichts geschrieben: ' . $e->getMessage());
 
@@ -194,7 +196,7 @@ class ImportMysqlCommand extends Command
                 '  %-12s Quelle %5d | Ziel %5d',
                 $table,
                 $plan[$table]['expected'],
-                $this->countRows($target, $table)
+                $this->countRows($target, $table),
             ));
         }
 
@@ -203,7 +205,7 @@ class ImportMysqlCommand extends Command
             $io->warning(sprintf(
                 '%d Wert(e) um Rand-Leerzeichen bereinigt (MySQL verglich mit PAD SPACE, '
                 . 'PostgreSQL nicht — ohne das erschienen sie doppelt im Auswahlfeld):',
-                count($this->trimmed)
+                count($this->trimmed),
             ));
             foreach ($this->trimmed as $line) {
                 $io->out('  ' . $line);
@@ -242,15 +244,18 @@ class ImportMysqlCommand extends Command
         return $connection;
     }
 
+    /**
+     * Kurzbeschreibung einer Verbindung fuer die Ausgabe (Treiber, Host, Datenbank).
+     */
     private function describe(Connection $connection): string
     {
         $config = $connection->config();
 
         return sprintf(
             '%s @ %s/%s',
-            (new \ReflectionClass($connection->getDriver()))->getShortName(),
+            (new ReflectionClass($connection->getDriver()))->getShortName(),
             $config['host'] ?? '?',
-            $config['database'] ?? '?'
+            $config['database'] ?? '?',
         );
     }
 
@@ -271,7 +276,7 @@ class ImportMysqlCommand extends Command
             $io->warning(sprintf(
                 '  %s: Spalte(n) %s gibt es nur in MySQL und werden NICHT übernommen.',
                 $table,
-                implode(', ', $onlyInSource)
+                implode(', ', $onlyInSource),
             ));
         }
         $onlyInTarget = array_diff($targetColumns, $sourceColumns);
@@ -279,17 +284,20 @@ class ImportMysqlCommand extends Command
             $io->out(sprintf(
                 '  %s: Spalte(n) %s sind neu und bleiben auf ihrem Vorgabewert.',
                 $table,
-                implode(', ', $onlyInTarget)
+                implode(', ', $onlyInTarget),
             ));
         }
 
         return array_values(array_intersect($sourceColumns, $targetColumns));
     }
 
+    /**
+     * Zeilenzahl einer Tabelle - dient dem Abgleich Quelle gegen Ziel.
+     */
     private function countRows(Connection $connection, string $table): int
     {
         $statement = $connection->execute(
-            'SELECT COUNT(*) FROM ' . $connection->getDriver()->quoteIdentifier($table)
+            'SELECT COUNT(*) FROM ' . $connection->getDriver()->quoteIdentifier($table),
         );
 
         return (int)$statement->fetch()[0];
@@ -317,7 +325,7 @@ class ImportMysqlCommand extends Command
             'SELECT %s FROM %s ORDER BY %s',
             $select,
             $quote->quoteIdentifier($table),
-            $quote->quoteIdentifier('id')
+            $quote->quoteIdentifier('id'),
         ))->fetchAll('assoc');
 
         if (!$rows) {
@@ -367,7 +375,7 @@ class ImportMysqlCommand extends Command
                  false
              )",
             $quoted,
-            $quoted
+            $quoted,
         ));
 
         return (int)$statement->fetch()[0];

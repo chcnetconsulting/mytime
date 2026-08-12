@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Test\TestCase\Controller;
 
+use Cake\I18n\Date;
 use Cake\TestSuite\IntegrationTestTrait;
 use Cake\TestSuite\TestCase;
 
@@ -101,7 +102,7 @@ class BookingsControllerTest extends TestCase
             'user_id' => 1,
             'group_id' => 1,
             'mandant_id' => $mandantId,
-            'bookingdate' => \Cake\I18n\Date::today()->firstOfMonth()->format('Y-m-d'),
+            'bookingdate' => Date::today()->firstOfMonth()->format('Y-m-d'),
             'ticket' => 'MYT-CUR',
             'bookingpsp' => $psp,
             'description' => 'Current month work',
@@ -119,7 +120,7 @@ class BookingsControllerTest extends TestCase
         $this->get('/bookings');
 
         $this->assertResponseOk();
-        $this->assertResponseContains('Stunden ' . \Cake\I18n\Date::today()->i18nFormat('MMMM yyyy'));
+        $this->assertResponseContains('Stunden ' . Date::today()->i18nFormat('MMMM yyyy'));
         // PSP-CORE 120 min = 2,00 h; PSP-EXTRA 60 min = 1,00 h; Total 180 min = 3,00 h
         $this->assertResponseContains('2,00 h');
         $this->assertResponseContains('1,00 h');
@@ -148,7 +149,7 @@ class BookingsControllerTest extends TestCase
             'user_id' => 3,
             'group_id' => 2,
             'mandant_id' => 1,
-            'bookingdate' => \Cake\I18n\Date::today()->firstOfMonth()->format('Y-m-d'),
+            'bookingdate' => Date::today()->firstOfMonth()->format('Y-m-d'),
             'ticket' => 'MYT-OTHER',
             'bookingpsp' => 'PSP-FOREIGN',
             'description' => 'Foreign work',

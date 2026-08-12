@@ -73,12 +73,8 @@ jobs:
   coding-standard:
     name: Coding Standard & Static Analysis
     runs-on: ubuntu-24.04
-    # Vorerst nur berichtend. Der erste Lauf ueberhaupt foerderte 310 phpcs-
-    # Meldungen (243 davon fixt phpcbf) und 212 phpstan-Fehler auf Level 8
-    # zutage — Altlast aus der Zeit, in der die CI auf Zweige horchte, die es
-    # in diesem Repository nie gab, und deshalb nie lief. Das gehoert in einen
-    # eigenen Aufraeum-PR und soll bis dahin keine Feature-Aenderung blockieren.
-    continue-on-error: true
+    # Wieder blockierend: phpcs ist sauber, phpstan laeuft gegen eine Baseline
+    # mit der eingefrorenen Altlast. Neuer Code muss beides bestehen.
 
     steps:
       - uses: actions/checkout@v7
@@ -89,7 +85,7 @@ jobs:
           php-version: '8.3'
           extensions: mbstring, intl
           coverage: none
-          tools: cs2pr, phpstan:1.10
+          tools: cs2pr
 
       - name: Composer install
         uses: ramsey/composer-install@v3
@@ -97,6 +93,9 @@ jobs:
       - name: Run PHP CodeSniffer
         run: vendor/bin/phpcs --report=checkstyle | cs2pr
 
+      # phpstan kommt aus require-dev statt aus setup-php: so analysieren CI und
+      # Entwicklungsrechner mit derselben Version. Das Speicherlimit ist noetig,
+      # sonst bricht der Parallel-Worker mit 128M ab.
       - name: Run phpstan
         if: always()
-        run: phpstan
+        run: vendor/bin/phpstan analyse --no-progress --memory-limit=1G

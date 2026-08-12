@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Test\Fixture;
 
 use Cake\Database\Connection;
+use Cake\Database\Driver\Postgres;
 use Cake\Datasource\ConnectionInterface;
 use Cake\TestSuite\Fixture\TestFixture;
 
@@ -34,7 +35,7 @@ abstract class AppFixture extends TestFixture
         $result = parent::insert($connection);
 
         assert($connection instanceof Connection);
-        if ($this->records && $connection->getDriver() instanceof \Cake\Database\Driver\Postgres) {
+        if ($this->records && $connection->getDriver() instanceof Postgres) {
             $table = $this->sourceName();
             // is_called = false, damit nextval() genau diesen Wert liefert.
             // Bei leerer Tabelle waere setval(seq, 0) unzulaessig, daher +1 auf
@@ -44,7 +45,7 @@ abstract class AppFixture extends TestFixture
                      pg_get_serial_sequence('\"{$table}\"', 'id'),
                      COALESCE((SELECT MAX(id) FROM \"{$table}\"), 0) + 1,
                      false
-                 )"
+                 )",
             );
         }
 

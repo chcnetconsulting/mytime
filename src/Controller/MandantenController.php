@@ -25,7 +25,7 @@ class MandantenController extends AppController
      * @param string|null $id Mandant id.
      * @return \Cake\Http\Response|null|void Renders view
      */
-    public function view($id = null)
+    public function view(?string $id = null)
     {
         $mandant = $this->Mandanten->get($id, contain: ['Bookings']);
 
@@ -54,7 +54,7 @@ class MandantenController extends AppController
      * @param string|null $id Mandant id.
      * @return \Cake\Http\Response|null|void Redirects on successful edit, renders view otherwise.
      */
-    public function edit($id = null)
+    public function edit(?string $id = null)
     {
         $mandant = $this->Mandanten->get($id, contain: []);
         if ($this->request->is(['patch', 'post', 'put'])) {
@@ -73,7 +73,7 @@ class MandantenController extends AppController
      * @param string|null $id Mandant id.
      * @return \Cake\Http\Response|null Redirects to index.
      */
-    public function delete($id = null)
+    public function delete(?string $id = null)
     {
         $this->request->allowMethod(['post', 'delete']);
         $mandant = $this->Mandanten->get($id);

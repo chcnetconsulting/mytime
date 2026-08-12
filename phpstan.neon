@@ -1,6 +1,16 @@
+includes:
+    # Eingefrorene Altlast: 139 Level-8-Befunde aus der Zeit vor der ersten
+    # statischen Analyse. Sie sind damit sichtbar und abzaehlbar, blockieren aber
+    # nicht mehr — neuer Code muss ohne Eintrag hier auskommen.
+    - phpstan-baseline.neon
+
 parameters:
     level: 8
     treatPhpDocTypesAsCertain: false
-    checkGenericClassInNonGenericObjectType: false
     paths:
         - src/
+    # Ohne diese Datei kennt phpstan CakePHPs globale Funktionen nicht und
+    # meldet reihenweise "Function h not found" / "Function env not found" —
+    # Fehlalarme, die den Blick auf die echten Befunde verstellen.
+    bootstrapFiles:
+        - vendor/cakephp/cakephp/src/functions.php

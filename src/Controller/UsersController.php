@@ -6,6 +6,7 @@ namespace App\Controller;
 use Cake\Core\Configure;
 use Cake\Event\EventInterface;
 use Cake\Http\Exception\ForbiddenException;
+use Cake\Http\Response;
 
 /**
  * Users Controller
@@ -14,11 +15,15 @@ use Cake\Http\Exception\ForbiddenException;
  */
 class UsersController extends AppController
 {
+    /**
+     * @param \Cake\Event\EventInterface $event The beforeFilter event.
+     * @return \Cake\Http\Response|null
+     */
     public function beforeFilter(EventInterface $event)
     {
         parent::beforeFilter($event);
 
-        if ($event->getResult() instanceof \Cake\Http\Response) {
+        if ($event->getResult() instanceof Response) {
             return;
         }
 
@@ -53,7 +58,7 @@ class UsersController extends AppController
      * @return \Cake\Http\Response|null|void Renders view
      * @throws \Cake\Datasource\Exception\RecordNotFoundException When record not found.
      */
-    public function view($id = null)
+    public function view(?string $id = null)
     {
         $user = $this->Users->get($id, contain: ['Groups']);
         $this->set(compact('user'));
@@ -88,7 +93,7 @@ class UsersController extends AppController
      * @return \Cake\Http\Response|null|void Redirects on successful edit, renders view otherwise.
      * @throws \Cake\Datasource\Exception\RecordNotFoundException When record not found.
      */
-    public function edit($id = null)
+    public function edit(?string $id = null)
     {
         $user = $this->Users->get($id, contain: []);
         $groups = $this->Users->Groups->find('list')->orderBy(['name' => 'ASC'])->all();
@@ -112,7 +117,7 @@ class UsersController extends AppController
      * @return \Cake\Http\Response|null Redirects to index.
      * @throws \Cake\Datasource\Exception\RecordNotFoundException When record not found.
      */
-    public function delete($id = null)
+    public function delete(?string $id = null)
     {
         $this->request->allowMethod(['post', 'delete']);
         $user = $this->Users->get($id);
@@ -145,6 +150,11 @@ class UsersController extends AppController
         return $data;
     }
 
+    /**
+     * Id der Gruppe "Default", in die neue Benutzer ohne eigene Zuordnung fallen.
+     *
+     * @return int|null
+     */
     private function defaultGroupId(): ?int
     {
         $group = $this->Users->Groups->find()
@@ -161,5 +171,4 @@ class UsersController extends AppController
 
         return empty($group?->id) ? null : (int)$group->id;
     }
-
 }

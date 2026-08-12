@@ -6,14 +6,19 @@ namespace App\Controller;
 use Cake\Core\Configure;
 use Cake\Event\EventInterface;
 use Cake\Http\Exception\ForbiddenException;
+use Cake\Http\Response;
 
 class GroupsController extends AppController
 {
+    /**
+     * @param \Cake\Event\EventInterface $event The beforeFilter event.
+     * @return \Cake\Http\Response|null
+     */
     public function beforeFilter(EventInterface $event)
     {
         parent::beforeFilter($event);
 
-        if ($event->getResult() instanceof \Cake\Http\Response) {
+        if ($event->getResult() instanceof Response) {
             return;
         }
 
@@ -28,12 +33,22 @@ class GroupsController extends AppController
         return null;
     }
 
+    /**
+     * Index method
+     *
+     * @return \Cake\Http\Response|null|void Renders view
+     */
     public function index()
     {
         $groups = $this->paginate($this->Groups->find()->contain(['Users']));
         $this->set(compact('groups'));
     }
 
+    /**
+     * Add method
+     *
+     * @return \Cake\Http\Response|null|void Redirects on successful add, renders view otherwise.
+     */
     public function add()
     {
         $group = $this->Groups->newEmptyEntity();
@@ -49,7 +64,13 @@ class GroupsController extends AppController
         $this->set(compact('group'));
     }
 
-    public function edit($id = null)
+    /**
+     * Edit method
+     *
+     * @param string|null $id Group id.
+     * @return \Cake\Http\Response|null|void Redirects on successful edit, renders view otherwise.
+     */
+    public function edit(?string $id = null)
     {
         $group = $this->Groups->get($id);
         if ($this->request->is(['patch', 'post', 'put'])) {
@@ -64,7 +85,13 @@ class GroupsController extends AppController
         $this->set(compact('group'));
     }
 
-    public function delete($id = null)
+    /**
+     * Delete method
+     *
+     * @param string|null $id Group id.
+     * @return \Cake\Http\Response|null Redirects to index.
+     */
+    public function delete(?string $id = null)
     {
         $this->request->allowMethod(['post', 'delete']);
         $group = $this->Groups->get($id);

@@ -10,6 +10,8 @@ use Cake\Http\Exception\NotFoundException;
 use Cake\I18n\Date;
 use Cake\ORM\Entity;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
 /**
@@ -19,6 +21,12 @@ use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
  */
 class BookingsController extends AppController
 {
+    /**
+     * Sichtbarkeit einer Buchung: Gruppe vor Benutzer. Ohne beides bleibt die
+     * Liste leer, ausser fuer Admins und im lokalen Betrieb ohne Auth.
+     *
+     * @return array<string, mixed>
+     */
     private function bookingScopeConditions(): array
     {
         if (Configure::read('Auth.disabled') && $this->currentUserId() === null) {
@@ -42,6 +50,9 @@ class BookingsController extends AppController
         return ['Bookings.id IS' => null];
     }
 
+    /**
+     * Mandanten-Id aus dem Query-String, nur wenn es eine positive Ganzzahl ist.
+     */
     private function queryMandantId(): ?int
     {
         $raw = $this->request->getQuery('mandant_id');
@@ -50,7 +61,7 @@ class BookingsController extends AppController
         }
         $parsed = filter_var($raw, FILTER_VALIDATE_INT);
 
-        return ($parsed !== false && $parsed > 0) ? $parsed : null;
+        return $parsed !== false && $parsed > 0 ? $parsed : null;
     }
 
     /**
@@ -150,6 +161,9 @@ class BookingsController extends AppController
         return $out;
     }
 
+    /**
+     * Dateiname der Exporte: timesheet_<Mandant>_<Benutzer>_<Jahr>_<Monat>.<ext>.
+     */
     private function exportFilename(string $ext, ?string $mandantName, int $year, int $month): string
     {
         $userId = $this->currentUserId();
@@ -164,6 +178,7 @@ class BookingsController extends AppController
 
         $sanitize = static function (string $s): string {
             $s = preg_replace('/[^A-Za-z0-9._-]+/', '-', $s) ?? '';
+
             return trim($s, '-');
         };
 
@@ -249,7 +264,13 @@ class BookingsController extends AppController
         $this->set(compact('bookings'));
     }
 
-    public function index() {
+    /**
+     * Buchungsliste mit Mandantenfilter, Suche und Monats-Stundenuebersicht.
+     *
+     * @return \Cake\Http\Response|null|void Renders view
+     */
+    public function index()
+    {
         $suche = $this->request->getQuery('table_search');
         $selectedMandantId = $this->queryMandantId();
 
@@ -273,7 +294,7 @@ class BookingsController extends AppController
             $selectedMandantId = null;
         }
 
-        if (!is_null($suche) && $suche !== "") {
+        if (!is_null($suche) && $suche !== '') {
             $query = $this->Bookings->find()
                 ->contain(['Mandanten'])
                 ->leftJoinWith('Mandanten')
@@ -297,10 +318,10 @@ class BookingsController extends AppController
 
             $query->orderBy(['Bookings.bookingdate' => 'DESC']);
         } else {
- 	    $query = $this->Bookings->find()
+            $query = $this->Bookings->find()
                 ->contain(['Mandanten'])
                 ->where($this->bookingScopeConditions())
-	        ->orderBy(['Bookings.bookingdate' => 'DESC']);
+            ->orderBy(['Bookings.bookingdate' => 'DESC']);
         }
 
         if ($selectedMandantId !== null) {
@@ -308,7 +329,7 @@ class BookingsController extends AppController
         }
 
         $this->set('suche', $suche);
-	$bookings = $this->paginate($query);
+        $bookings = $this->paginate($query);
         $monthSummary = $this->currentMonthSummary($selectedMandantId);
         $this->set(compact('bookings', 'mandanten', 'selectedMandantId', 'monthSummary'));
     }
@@ -320,7 +341,7 @@ class BookingsController extends AppController
      * @return \Cake\Http\Response|null|void Renders view
      * @throws \Cake\Datasource\Exception\RecordNotFoundException When record not found.
      */
-    public function view($id = null)
+    public function view(?string $id = null)
     {
         $booking = $this->Bookings->find()
             ->contain(['Mandanten'])
@@ -337,7 +358,7 @@ class BookingsController extends AppController
      */
     public function add()
     {
-	$booking = $this->Bookings->newEmptyEntity();
+        $booking = $this->Bookings->newEmptyEntity();
         $session = $this->request->getSession();
         $activeMandantId = $session->read('Bookings.activeMandantId');
         if ($activeMandantId === null) {
@@ -374,6 +395,11 @@ class BookingsController extends AppController
         $this->set(compact('booking', 'psps', 'tickets', 'mandanten'));
     }
 
+    /**
+     * JSON-Vorschlagswerte zu einem Ticket fuer den Add-Dialog.
+     *
+     * @return \Cake\Http\Response|null
+     */
     public function ticketLookup()
     {
         $ticket = trim((string)$this->request->getQuery('ticket', ''));
@@ -433,7 +459,7 @@ class BookingsController extends AppController
      * @return \Cake\Http\Response|null|void Redirects on successful edit, renders view otherwise.
      * @throws \Cake\Datasource\Exception\RecordNotFoundException When record not found.
      */
-    public function edit($id = null)
+    public function edit(?string $id = null)
     {
         $booking = $this->Bookings->find()
             ->where($this->bookingScopeConditions())
@@ -465,7 +491,7 @@ class BookingsController extends AppController
      * @return \Cake\Http\Response|null Redirects to index.
      * @throws \Cake\Datasource\Exception\RecordNotFoundException When record not found.
      */
-    public function delete($id = null)
+    public function delete(?string $id = null)
     {
         $this->request->allowMethod(['post', 'delete']);
         $booking = $this->Bookings->find()
@@ -481,8 +507,15 @@ class BookingsController extends AppController
         return $this->redirect(['action' => 'index']);
     }
 
-    /* Generiert ein excelsheet aus den Daten */
-    public function genxls($year, $month) {
+    /**
+     * Monats-Export als XLSX: Einzelbuchungen und darunter die Summe je PSP.
+     *
+     * @param string|int|null $year Jahr aus der URL.
+     * @param string|int|null $month Monat aus der URL.
+     * @return \Cake\Http\Response|null
+     */
+    public function genxls(string|int|null $year, string|int|null $month)
+    {
         $year = filter_var($year, FILTER_VALIDATE_INT, [
             'options' => ['min_range' => 2000, 'max_range' => 2100],
         ]);
@@ -509,17 +542,16 @@ class BookingsController extends AppController
         }
         $mandantConditions = $mandantId !== null ? ['Bookings.mandant_id' => $mandantId] : [];
 
-	$spreadsheet = new Spreadsheet();
-	$activeWorksheet = $spreadsheet->getActiveSheet();
-	$activeWorksheet->setCellValue('A1', 'Date');
-	$activeWorksheet->setCellValue('A2', 'Ticket');
-	$activeWorksheet->setCellValue('A3', 'Booking PSP');
-	$activeWorksheet->setCellValue('A4', 'Description');
-	$activeWorksheet->setCellValue('A5', 'Minutes');
+        $spreadsheet = new Spreadsheet();
+        $activeWorksheet = $spreadsheet->getActiveSheet();
+        $activeWorksheet->setCellValue('A1', 'Date');
+        $activeWorksheet->setCellValue('A2', 'Ticket');
+        $activeWorksheet->setCellValue('A3', 'Booking PSP');
+        $activeWorksheet->setCellValue('A4', 'Description');
+        $activeWorksheet->setCellValue('A5', 'Minutes');
 
-	$activeWorksheet->getStyle('A1:E1')->getFont()->setBold(true);
-	$activeWorksheet->getStyle('A1:E1')->getBorders()->getBottom()->setBorderStyle(\PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN);
-		
+        $activeWorksheet->getStyle('A1:E1')->getFont()->setBold(true);
+        $activeWorksheet->getStyle('A1:E1')->getBorders()->getBottom()->setBorderStyle(Border::BORDER_THIN);
 
         // Bereichsfilter statt YEAR()/MONTH() — datenbank-portabel und nutzt
         // einen Index auf bookingdate. Dasselbe Muster wie in
@@ -532,84 +564,93 @@ class BookingsController extends AppController
             'Bookings.bookingdate <=' => $lastOfMonth->format('Y-m-d'),
         ];
 
-	$results = $this->Bookings->find()
+        $results = $this->Bookings->find()
              ->where($this->bookingScopeConditions())
-			 ->where($dateConditions)
-			 ->where($mandantConditions)
-			 ->orderBy(['bookingdate' => 'ASC'])
-			 ->toArray();
+             ->where($dateConditions)
+             ->where($mandantConditions)
+             ->orderBy(['bookingdate' => 'ASC'])
+             ->toArray();
 
-    $activeWorksheet->setCellValue('A1', 'Date');
-    $activeWorksheet->getColumnDimension('A')->setWidth(10);
-    $activeWorksheet->setCellValue('B1', 'Ticket');
-    $activeWorksheet->getColumnDimension('B')->setWidth(15);
-    $activeWorksheet->setCellValue('C1', 'Booking PSP');
-    $activeWorksheet->getColumnDimension('C')->setWidth(20);
-    $activeWorksheet->setCellValue('D1', 'Description');
-    $activeWorksheet->getColumnDimension('D')->setWidth(50);
-    $activeWorksheet->getStyle('D')->getAlignment()->setWrapText(true);
-    $activeWorksheet->setCellValue('E1', 'Minutes');
+        $activeWorksheet->setCellValue('A1', 'Date');
+        $activeWorksheet->getColumnDimension('A')->setWidth(10);
+        $activeWorksheet->setCellValue('B1', 'Ticket');
+        $activeWorksheet->getColumnDimension('B')->setWidth(15);
+        $activeWorksheet->setCellValue('C1', 'Booking PSP');
+        $activeWorksheet->getColumnDimension('C')->setWidth(20);
+        $activeWorksheet->setCellValue('D1', 'Description');
+        $activeWorksheet->getColumnDimension('D')->setWidth(50);
+        $activeWorksheet->getStyle('D')->getAlignment()->setWrapText(true);
+        $activeWorksheet->setCellValue('E1', 'Minutes');
 
+        $i = 2;
+        foreach ($results as $row) {
+            // Set cell A6 with the Excel date/time value
+            $activeWorksheet->setCellValue('A' . $i, $row['bookingdate']->i18nFormat('yyyy-MM-dd'));
+            $activeWorksheet->setCellValue('B' . $i, trim($row['ticket']));
+            $activeWorksheet->setCellValue('C' . $i, trim($row['bookingpsp']));
+            $activeWorksheet->setCellValue('D' . $i, trim($row['description']));
+            $activeWorksheet->setCellValue('E' . $i, $row['minutes']);
+            $i++;
+        }
+        $i = $i + 2;
 
-    $i = 2;
-	foreach($results as $row) {
-        // Set cell A6 with the Excel date/time value
-        $activeWorksheet->setCellValue('A'.$i, $row['bookingdate']->i18nFormat('yyyy-MM-dd'));
-        $activeWorksheet->setCellValue('B'.$i, trim($row['ticket']));
-        $activeWorksheet->setCellValue('C'.$i, trim($row['bookingpsp']));
-        $activeWorksheet->setCellValue('D'.$i, trim($row['description']));
-        $activeWorksheet->setCellValue('E'.$i, $row['minutes']);
-        $i++;
-	}
-    $i = $i + 2;
-
-    $results = $this->Bookings->find()
+        $results = $this->Bookings->find()
             ->where($this->bookingScopeConditions())
-	    ->where($dateConditions)
-	    ->where($mandantConditions)
-            ->select(['bookingpsp','minutes'=>$this->Bookings->query()->func()->sum('minutes')])
-	    ->groupBy(['bookingpsp'])
+        ->where($dateConditions)
+        ->where($mandantConditions)
+            ->select(['bookingpsp','minutes' => $this->Bookings->query()->func()->sum('minutes')])
+        ->groupBy(['bookingpsp'])
             ->orderBy(['bookingpsp' => 'ASC'])
             ->toArray();
 
-    $activeWorksheet->setCellValue('B'.$i, 'Booking PSP');
-    $activeWorksheet->setCellValue('C'.$i, 'Minutes Consolidated');
-    $activeWorksheet->setCellValue('D'.$i, 'Hours Consolidated');
+        $activeWorksheet->setCellValue('B' . $i, 'Booking PSP');
+        $activeWorksheet->setCellValue('C' . $i, 'Minutes Consolidated');
+        $activeWorksheet->setCellValue('D' . $i, 'Hours Consolidated');
 
-    $activeWorksheet->getStyle('B'.$i.':D'.$i)->getFont()->setBold(true);
-    $activeWorksheet->getStyle('B'.$i.':D'.$i)->getBorders()->getBottom()->setBorderStyle(\PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN);    
-    $activeWorksheet->getStyle('C'.$i.':D'.$i)->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_RIGHT);
-    $i++;
-    $totalMinutes = 0;
-    foreach($results as $row) {
-        $activeWorksheet->setCellValue('B'.$i, $row['bookingpsp']);
-        $activeWorksheet->setCellValue('C'.$i, $row['minutes']);
-        $activeWorksheet->setCellValue('D'.$i, round($row['minutes']/60, 2));
-        $totalMinutes += $row['minutes'];
+        $activeWorksheet->getStyle('B' . $i . ':D' . $i)->getFont()->setBold(true);
+        $activeWorksheet->getStyle('B' . $i . ':D' . $i)->getBorders()->getBottom()
+            ->setBorderStyle(Border::BORDER_THIN);
+        $activeWorksheet->getStyle('C' . $i . ':D' . $i)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
         $i++;
+        $totalMinutes = 0;
+        foreach ($results as $row) {
+            $activeWorksheet->setCellValue('B' . $i, $row['bookingpsp']);
+            $activeWorksheet->setCellValue('C' . $i, $row['minutes']);
+            $activeWorksheet->setCellValue('D' . $i, round($row['minutes'] / 60, 2));
+            $totalMinutes += $row['minutes'];
+            $i++;
+        }
+
+        $activeWorksheet->getStyle('B' . ($i - 1) . ':D' . ($i - 1))->getBorders()->getBottom()
+            ->setBorderStyle(Border::BORDER_THIN);
+        $activeWorksheet->setCellValue('B' . $i, 'Total');
+        $activeWorksheet->setCellValue('C' . $i, $totalMinutes);
+        $activeWorksheet->setCellValue('D' . $i, round($totalMinutes / 60, 2));
+        $activeWorksheet->getStyle('B' . $i . ':D' . $i)->getFont()->setBold(true);
+        $activeWorksheet->getStyle('C' . $i . ':D' . $i)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+
+        $activeWorksheet->getStyle('A1:Z99')
+        ->getAlignment()->setVertical(Alignment::VERTICAL_TOP);
+
+        $writer = new Xlsx($spreadsheet);
+        $tmpname = tempnam(sys_get_temp_dir(), 'xlsx');
+        $writer->save($tmpname);
+        $this->response = $this->response->withFile(
+            $tmpname,
+            ['download' => true, 'name' => $this->exportFilename('xlsx', $mandantName, $year, $month)],
+        );
+
+        return $this->response;
     }
 
-    $activeWorksheet->getStyle('B'.($i-1).':D'.($i-1))->getBorders()->getBottom()->setBorderStyle(\PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN);
-    $activeWorksheet->setCellValue('B'.$i, 'Total');
-    $activeWorksheet->setCellValue('C'.$i, $totalMinutes);
-    $activeWorksheet->setCellValue('D'.$i, round($totalMinutes / 60, 2));
-    $activeWorksheet->getStyle('B'.$i.':D'.$i)->getFont()->setBold(true);
-    $activeWorksheet->getStyle('C'.$i.':D'.$i)->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_RIGHT);
-
-    $activeWorksheet->getStyle('A1:Z99')
-    ->getAlignment()->setVertical(\PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_TOP);
-
-	$writer = new Xlsx($spreadsheet);
-    $tmpname = tempnam(sys_get_temp_dir(), 'xlsx');
-	$writer->save($tmpname);
-    $this->response = $this->response->withFile(
-        $tmpname,
-        ['download' => true, 'name' => $this->exportFilename('xlsx', $mandantName, $year, $month)]
-    );
-    return $this->response;
-    }
-
-    public function genpdf($year, $month)
+    /**
+     * Monats-Export als PDF.
+     *
+     * @param string|int|null $year Jahr aus der URL.
+     * @param string|int|null $month Monat aus der URL.
+     * @return \Cake\Http\Response|null
+     */
+    public function genpdf(string|int|null $year, string|int|null $month)
     {
         $year = filter_var($year, FILTER_VALIDATE_INT, ['options' => ['min_range' => 2000, 'max_range' => 2100]]);
         $month = filter_var($month, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1, 'max_range' => 12]]);
@@ -631,7 +672,6 @@ class BookingsController extends AppController
                 $mandantName = (string)$mandant->name;
             }
         }
-        $mandantConditions = $mandantId !== null ? ['Bookings.mandant_id' => $mandantId] : [];
 
         $userId = $this->currentUserId();
         $userRecord = $userId ? $this->fetchTable('Users')
@@ -646,7 +686,7 @@ class BookingsController extends AppController
             $this->bookingScopeConditions(),
             $mandantId,
             $username,
-            $mandantName
+            $mandantName,
         );
 
         $filename = $this->exportFilename('pdf', $mandantName, $year, $month);
@@ -662,8 +702,12 @@ class BookingsController extends AppController
      * Approval-PDF (z. B. die "Approved"-Mail des Kunden) für einen Monat
      * über die Weboberfläche hochladen. Session-Auth; speichert je
      * User/Mandant/Monat genau einen Datensatz (Upsert) als BLOB.
+     *
+     * @param string|int|null $year Jahr aus der URL.
+     * @param string|int|null $month Monat aus der URL.
+     * @return \Cake\Http\Response|null
      */
-    public function uploadApproval($year, $month)
+    public function uploadApproval(string|int|null $year, string|int|null $month)
     {
         $this->request->allowMethod(['post']);
         $year = filter_var($year, FILTER_VALIDATE_INT, ['options' => ['min_range' => 2000, 'max_range' => 2100]]);
@@ -726,8 +770,12 @@ class BookingsController extends AppController
 
     /**
      * Gespeichertes Approval-PDF eines Monats herunterladen (Session-Auth).
+     *
+     * @param string|int|null $year Jahr aus der URL.
+     * @param string|int|null $month Monat aus der URL.
+     * @return \Cake\Http\Response|null
      */
-    public function downloadApproval($year, $month)
+    public function downloadApproval(string|int|null $year, string|int|null $month)
     {
         $year = filter_var($year, FILTER_VALIDATE_INT, ['options' => ['min_range' => 2000, 'max_range' => 2100]]);
         $month = filter_var($month, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1, 'max_range' => 12]]);
@@ -752,6 +800,6 @@ class BookingsController extends AppController
         return $this->response
             ->withType($approval->mime ?: 'application/pdf')
             ->withHeader('Content-Disposition', 'attachment; filename="' . $approval->filename . '"')
-            ->withStringBody(\App\Controller\ApiController::binaryToString($approval->content));
+            ->withStringBody(ApiController::binaryToString($approval->content));
     }
 }

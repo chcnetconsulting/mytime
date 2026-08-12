@@ -27,6 +27,10 @@ use Cake\Http\Response;
  */
 class ApiController extends AppController
 {
+    /**
+     * @param \Cake\Event\EventInterface $event The beforeFilter event.
+     * @return \Cake\Http\Response|null
+     */
     public function beforeFilter(EventInterface $event)
     {
         // AppController lässt 'Api' bewusst an der Session-Auth vorbei (siehe dort).
@@ -71,6 +75,11 @@ class ApiController extends AppController
         return $user;
     }
 
+    /**
+     * Prueft Jahr und Monat aus der URL und gibt sie als Ganzzahlen zurueck.
+     *
+     * @return array{int, int}
+     */
     private function period(mixed $year, mixed $month): array
     {
         $year = filter_var($year, FILTER_VALIDATE_INT, ['options' => ['min_range' => 2000, 'max_range' => 2100]]);
@@ -82,11 +91,16 @@ class ApiController extends AppController
         return [$year, $month];
     }
 
+    /**
+     * Mandant aus dem Query-String, sofern angegeben und vorhanden.
+     *
+     * @return array{int|null, string|null}
+     */
     private function mandant(): array
     {
         $raw = $this->request->getQuery('mandant_id');
-        $id = ($raw === null || $raw === '') ? null : filter_var($raw, FILTER_VALIDATE_INT);
-        $id = ($id !== false && $id !== null && $id > 0) ? $id : null;
+        $id = $raw === null || $raw === '' ? null : filter_var($raw, FILTER_VALIDATE_INT);
+        $id = $id !== false && $id !== null && $id > 0 ? $id : null;
         $name = null;
         if ($id !== null) {
             $m = $this->fetchTable('Mandanten')->find()->select(['id', 'name'])->where(['id' => $id])->first();
@@ -101,8 +115,11 @@ class ApiController extends AppController
 
     /**
      * GET /api/timesheet/{year}/{month}
+     *
+     * @param string|int|null $year Jahr aus der URL.
+     * @param string|int|null $month Monat aus der URL.
      */
-    public function timesheet($year = null, $month = null): Response
+    public function timesheet(string|int|null $year = null, string|int|null $month = null): Response
     {
         [$year, $month] = $this->period($year, $month);
         [$mandantId, $mandantName] = $this->mandant();
@@ -115,9 +132,16 @@ class ApiController extends AppController
             ['Bookings.user_id' => (int)$owner->id],
             $mandantId,
             trim(($owner->first_name ?? '') . ' ' . ($owner->last_name ?? '')) ?: (string)$owner->username,
-            $mandantName
+            $mandantName,
         );
-        $filename = $service->filename($mandantName, $owner->first_name, $owner->last_name, $owner->username, $year, $month);
+        $filename = $service->filename(
+            $mandantName,
+            $owner->first_name,
+            $owner->last_name,
+            $owner->username,
+            $year,
+            $month,
+        );
 
         return $this->response
             ->withType('application/pdf')
@@ -128,8 +152,11 @@ class ApiController extends AppController
     /**
      * GET  /api/approval/{year}/{month} → Download
      * POST /api/approval/{year}/{month} → Upload (Upsert)
+     *
+     * @param string|int|null $year Jahr aus der URL.
+     * @param string|int|null $month Monat aus der URL.
      */
-    public function approval($year = null, $month = null): Response
+    public function approval(string|int|null $year = null, string|int|null $month = null): Response
     {
         [$year, $month] = $this->period($year, $month);
         [$mandantId] = $this->mandant();
@@ -261,6 +288,9 @@ class ApiController extends AppController
         return [$content, $filename, 'application/pdf'];
     }
 
+    /**
+     * Einheitliche Fehlerantwort der REST-API.
+     */
     private function jsonError(string $message, int $status): Response
     {
         return $this->response
