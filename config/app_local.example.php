@@ -36,40 +36,40 @@ return [
      */
     'Datasources' => [
         'default' => [
-            'host' => 'localhost',
+            'host' => env('DB_HOST', 'localhost'),
+            'port' => (int)env('DB_PORT', '5432'),
+            'username' => env('DB_USERNAME', 'mytime'),
+            'password' => env('DB_PASSWORD', ''),
+            'database' => env('DB_DATABASE', 'mytime'),
             /*
-             * CakePHP will use the default DB port based on the driver selected
-             * MySQL on MAMP uses port 8889, MAMP users will want to uncomment
-             * the following line and set the port accordingly
+             * Anderes Schema als 'public'? Hier eintragen.
              */
-            //'port' => 'non_standard_port_number',
-
-            'username' => 'my_app',
-            'password' => 'secret',
-
-            'database' => 'my_app',
+            'schema' => env('DB_SCHEMA', 'public'),
+            'encoding' => 'utf8',
             /*
-             * If not using the default 'public' schema with the PostgreSQL driver
-             * set it here.
+             * Im Cluster Pflicht (Spilo lehnt unverschluesselte Verbindungen
+             * ab), lokal meist unnoetig.
              */
-            //'schema' => 'myapp',
-
+            'ssl' => filter_var(env('DB_SSL', false), FILTER_VALIDATE_BOOLEAN),
+            'ssl_mode' => env('DB_SSLMODE', 'prefer'),
             /*
-             * You can use a DSN string to set the entire configuration
+             * Alternativ die gesamte Verbindung als DSN:
+             *   postgres://benutzer:passwort@host:5432/datenbank
              */
             'url' => env('DATABASE_URL', null),
         ],
 
         /*
          * The test connection is used during the test suite.
+         * Ohne gesetzte Umgebung SQLite, sonst PostgreSQL — s. docs/testing.md.
          */
         'test' => [
-            'host' => 'localhost',
-            //'port' => 'non_standard_port_number',
-            'username' => 'my_app',
-            'password' => 'secret',
-            'database' => 'test_myapp',
-            //'schema' => 'myapp',
+            'host' => env('DATABASE_TEST_HOST', 'localhost'),
+            'port' => (int)env('DATABASE_TEST_PORT', '5432'),
+            'username' => env('DATABASE_TEST_USER', 'mytime'),
+            'password' => env('DATABASE_TEST_PASS', ''),
+            'database' => env('DATABASE_TEST_NAME', 'mytime_test'),
+            'schema' => env('DB_SCHEMA', 'public'),
             'url' => env('DATABASE_TEST_URL', 'sqlite://127.0.0.1/tmp/tests.sqlite'),
         ],
     ],

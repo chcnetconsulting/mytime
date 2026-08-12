@@ -5,7 +5,12 @@
 /logs/*
 /tmp/*
 /vendor/*
-/k8s/02-secret.yaml
+# Alles, was "secret" im Namen traegt, bleibt draussen — nicht nur die eine
+# Datei: es liegen dort auch Sicherungskopien (02-secret.yaml.bak.*) und lose
+# Token-Dateien (mytime-secret) mit echten Werten.
+/k8s/*secret*
+# ... ausser den Vorlagen: die gehoeren ins Repo und tragen nie echte Werte.
+!/k8s/*.example.yaml
 /*.sql
 /hetznerk8sconfig
 

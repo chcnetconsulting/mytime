@@ -3,10 +3,12 @@ declare(strict_types=1);
 
 namespace App\Controller;
 
+use App\Service\TimesheetPdfService;
 use Cake\Core\Configure;
 use Cake\Http\Exception\BadRequestException;
+use Cake\Http\Exception\NotFoundException;
 use Cake\I18n\Date;
-use Mpdf\Mpdf;
+use Cake\ORM\Entity;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
@@ -51,6 +53,103 @@ class BookingsController extends AppController
         return ($parsed !== false && $parsed > 0) ? $parsed : null;
     }
 
+    /**
+     * PSP-Auswahlliste: je PSP die Mandanten, unter denen er schon gebucht
+     * wurde, kommasepariert. Das JavaScript in templates/Bookings/{add,edit}.php
+     * splittet diesen String und blendet damit Optionen aus, die nicht zum
+     * gewaehlten Mandanten gehoeren.
+     *
+     * Frueher eine GROUP_CONCAT-Aggregation. Die gibt es in PostgreSQL nicht,
+     * und string_agg haette den Code an einen Dialekt gebunden. Bei rund 500
+     * Buchungen ist das Zusammenfassen in PHP ohnehin billiger als das Aggregat.
+     *
+     * @return array<\Cake\ORM\Entity>
+     */
+    private function pspOptions(): array
+    {
+        $rows = $this->Bookings->find()
+            ->select(['bookingpsp', 'mandant_id'])
+            ->where($this->bookingScopeConditions())
+            ->orderBy(['Bookings.bookingpsp' => 'ASC'])
+            ->disableHydration()
+            ->toArray();
+
+        $byPsp = [];
+        foreach ($rows as $row) {
+            $psp = (string)$row['bookingpsp'];
+            $byPsp[$psp] ??= [];
+            if ($row['mandant_id'] !== null) {
+                $byPsp[$psp][(int)$row['mandant_id']] = true;
+            }
+        }
+
+        $out = [];
+        foreach ($byPsp as $psp => $mandantIds) {
+            $out[] = new Entity([
+                'bookingpsp' => $psp,
+                'mandanten' => implode(',', array_keys($mandantIds)),
+            ], ['markClean' => true]);
+        }
+
+        return $out;
+    }
+
+    /**
+     * Ticket-Auswahlliste: je Ticket die juengste Buchung (Datum, PSP,
+     * Beschreibung) plus alle Mandanten, unter denen es gebucht wurde.
+     *
+     * Ersetzt drei MySQL-Eigenheiten auf einmal: SUBSTRING_INDEX/MAX(CONCAT())
+     * als "letzter Wert je Gruppe", GROUP_CONCAT fuer die Mandantenliste und
+     * den REGEXP-Operator, mit dem Platzhalter-Tickets wie "-" oder "."
+     * herausgefiltert wurden. Keines davon kennt PostgreSQL unter diesem Namen.
+     *
+     * Nebeneffekt: der alte SUBSTRING(..., 11, 50) schnitt die Beschreibung
+     * nach 50 *Bytes* ab und konnte dabei Umlaute zerlegen. Das Kuerzen macht
+     * ohnehin die View mit mb_substr().
+     *
+     * @return array<\Cake\ORM\Entity>
+     */
+    private function ticketOptions(): array
+    {
+        $rows = $this->Bookings->find()
+            ->select(['ticket', 'bookingdate', 'bookingpsp', 'description', 'mandant_id'])
+            ->where($this->bookingScopeConditions())
+            ->orderBy(['Bookings.bookingdate' => 'DESC', 'Bookings.id' => 'DESC'])
+            ->disableHydration()
+            ->toArray();
+
+        $tickets = [];
+        foreach ($rows as $row) {
+            $ticket = (string)$row['ticket'];
+            if (!preg_match('/^[A-Za-z0-9]/', $ticket)) {
+                continue;
+            }
+            if (!isset($tickets[$ticket])) {
+                // Erste gesehene Zeile ist dank der Sortierung die juengste.
+                $tickets[$ticket] = [
+                    'ticket' => $ticket,
+                    'last_date' => $row['bookingdate']?->format('Y-m-d') ?? '',
+                    'last_psp' => (string)$row['bookingpsp'],
+                    'last_desc' => (string)$row['description'],
+                    'mandanten' => [],
+                ];
+            }
+            if ($row['mandant_id'] !== null) {
+                $tickets[$ticket]['mandanten'][(int)$row['mandant_id']] = true;
+            }
+        }
+
+        // Die Reihenfolge stammt aus der Abfrage: das Ticket mit der juengsten
+        // Buchung zuerst — wie das fruehere ORDER BY last_date DESC.
+        $out = [];
+        foreach ($tickets as $data) {
+            $data['mandanten'] = implode(',', array_keys($data['mandanten']));
+            $out[] = new Entity($data, ['markClean' => true]);
+        }
+
+        return $out;
+    }
+
     private function exportFilename(string $ext, ?string $mandantName, int $year, int $month): string
     {
         $userId = $this->currentUserId();
@@ -82,6 +181,57 @@ class BookingsController extends AppController
         $parts[] = sprintf('%02d', $month);
 
         return implode('_', array_filter($parts, static fn($p) => $p !== '')) . '.' . $ext;
+    }
+
+    /**
+     * Stundenuebersicht des laufenden Monats fuer die Index-Seite: je
+     * Booking-PSP die Summe der Minuten plus Gesamtsumme, eingeschraenkt auf
+     * den gewaehlten Mandanten.
+     *
+     * Bereichsfilter auf bookingdate statt YEAR()/MONTH() — dasselbe
+     * portable Muster wie in genxls() und TimesheetPdfService, damit alle
+     * drei denselben Monat auf dieselbe Weise abgrenzen.
+     *
+     * @return array{year:int,month:int,label:string,psps:array<int,array{bookingpsp:string,minutes:int}>,totalMinutes:int}
+     */
+    private function currentMonthSummary(?int $mandantId): array
+    {
+        $firstOfMonth = Date::today()->firstOfMonth();
+        $lastOfMonth = $firstOfMonth->lastOfMonth();
+
+        $query = $this->Bookings->find()
+            ->where($this->bookingScopeConditions())
+            ->where([
+                'Bookings.bookingdate >=' => $firstOfMonth->format('Y-m-d'),
+                'Bookings.bookingdate <=' => $lastOfMonth->format('Y-m-d'),
+            ])
+            ->select([
+                'bookingpsp',
+                'minutes' => $this->Bookings->query()->func()->sum('minutes'),
+            ])
+            ->groupBy(['Bookings.bookingpsp'])
+            ->orderBy(['Bookings.bookingpsp' => 'ASC'])
+            ->disableHydration();
+
+        if ($mandantId !== null) {
+            $query->where(['Bookings.mandant_id' => $mandantId]);
+        }
+
+        $psps = [];
+        $totalMinutes = 0;
+        foreach ($query->toArray() as $row) {
+            $minutes = (int)$row['minutes'];
+            $psps[] = ['bookingpsp' => (string)$row['bookingpsp'], 'minutes' => $minutes];
+            $totalMinutes += $minutes;
+        }
+
+        return [
+            'year' => (int)$firstOfMonth->year,
+            'month' => (int)$firstOfMonth->month,
+            'label' => $firstOfMonth->i18nFormat('MMMM yyyy'),
+            'psps' => $psps,
+            'totalMinutes' => $totalMinutes,
+        ];
     }
 
     /**
@@ -127,14 +277,25 @@ class BookingsController extends AppController
             $query = $this->Bookings->find()
                 ->contain(['Mandanten'])
                 ->leftJoinWith('Mandanten')
-                ->where($this->bookingScopeConditions())
-                ->where([
-                    'OR' => [
-                        'Bookings.bookingpsp like ' => "%{$suche}%",
-                        'Bookings.description like' => "%{$suche}%",
-                        'Mandanten.name like' => "%{$suche}%",
-                    ],
-                ])->orderBy(['Bookings.bookingdate' => 'DESC']);
+                ->where($this->bookingScopeConditions());
+
+            // Beidseitig kleinschreiben, statt sich auf die Kollation zu
+            // verlassen: MySQL suchte mit utf8mb4_*_ci unabhaengig von der
+            // Gross-/Kleinschreibung, PostgreSQLs LIKE ist dagegen immer
+            // exakt. Ohne das hier faende die Suche nach der Umstellung
+            // stillschweigend weniger — ILIKE scheidet aus, weil SQLite (die
+            // Testdatenbank) es nicht kennt.
+            $needle = '%' . mb_strtolower($suche) . '%';
+            $lower = static fn($q, string $field) => $q->func()->lower([$field => 'identifier']);
+            $query->where(function ($exp, $q) use ($lower, $needle) {
+                return $exp->or([
+                    $q->expr()->like($lower($q, 'Bookings.bookingpsp'), $needle),
+                    $q->expr()->like($lower($q, 'Bookings.description'), $needle),
+                    $q->expr()->like($lower($q, 'Mandanten.name'), $needle),
+                ]);
+            });
+
+            $query->orderBy(['Bookings.bookingdate' => 'DESC']);
         } else {
  	    $query = $this->Bookings->find()
                 ->contain(['Mandanten'])
@@ -148,7 +309,8 @@ class BookingsController extends AppController
 
         $this->set('suche', $suche);
 	$bookings = $this->paginate($query);
-        $this->set(compact('bookings', 'mandanten', 'selectedMandantId'));
+        $monthSummary = $this->currentMonthSummary($selectedMandantId);
+        $this->set(compact('bookings', 'mandanten', 'selectedMandantId', 'monthSummary'));
     }
 
     /**
@@ -176,42 +338,33 @@ class BookingsController extends AppController
     public function add()
     {
 	$booking = $this->Bookings->newEmptyEntity();
-        $lastBooking = $this->Bookings->find()
-            ->select(['Bookings.mandant_id'])
-            ->where($this->bookingScopeConditions())
-            ->where(['Bookings.mandant_id IS NOT' => null])
-            ->orderBy(['Bookings.bookingdate' => 'DESC', 'Bookings.id' => 'DESC'])
-            ->first();
-        if ($lastBooking !== null) {
-            $booking->mandant_id = $lastBooking->mandant_id;
+        $session = $this->request->getSession();
+        $activeMandantId = $session->read('Bookings.activeMandantId');
+        if ($activeMandantId === null) {
+            $lastBooking = $this->Bookings->find()
+                ->select(['Bookings.mandant_id'])
+                ->where($this->bookingScopeConditions())
+                ->where(['Bookings.mandant_id IS NOT' => null])
+                ->orderBy(['Bookings.bookingdate' => 'DESC', 'Bookings.id' => 'DESC'])
+                ->first();
+            if ($lastBooking !== null) {
+                $activeMandantId = $lastBooking->mandant_id;
+            }
         }
-	$psps = $this->Bookings->find()
-            ->select([
-                'bookingpsp',
-                'mandanten' => $this->Bookings->query()->newExpr('CAST(GROUP_CONCAT(DISTINCT mandant_id) AS CHAR)'),
-            ])
-            ->where($this->bookingScopeConditions())
-            ->groupBy(['bookingpsp'])
-            ->all();
-        $tickets = $this->Bookings->find()
-            ->select([
-                'ticket',
-                'last_date' => $this->Bookings->query()->func()->max('bookingdate'),
-                'last_psp' => $this->Bookings->query()->newExpr("SUBSTRING_INDEX(MAX(CONCAT(bookingdate, '|', bookingpsp)), '|', -1)"),
-                'last_desc' => $this->Bookings->query()->newExpr('SUBSTRING(MAX(CONCAT(bookingdate, description)), 11, 50)'),
-                'mandanten' => $this->Bookings->query()->newExpr('CAST(GROUP_CONCAT(DISTINCT mandant_id) AS CHAR)'),
-            ])
-            ->where($this->bookingScopeConditions())
-            ->where(['ticket REGEXP' => '^[A-Za-z0-9]'])
-            ->groupBy(['ticket'])
-            ->orderBy(['last_date' => 'DESC'])
-            ->all();
+        if ($activeMandantId !== null) {
+            $booking->mandant_id = (int)$activeMandantId;
+        }
+        $psps = $this->pspOptions();
+        $tickets = $this->ticketOptions();
         $mandanten = $this->Bookings->Mandanten->find('list')->orderBy(['name' => 'ASC'])->all();
         if ($this->request->is('post')) {
             $booking = $this->Bookings->patchEntity($booking, $this->request->getData());
             $booking->user_id = parent::currentUserId();
             $booking->group_id = $this->currentGroupId();
             if ($this->Bookings->save($booking)) {
+                if ($booking->mandant_id !== null) {
+                    $session->write('Bookings.activeMandantId', (int)$booking->mandant_id);
+                }
                 $this->Flash->success(__('The booking has been saved.'));
 
                 return $this->redirect(['action' => 'index']);
@@ -232,9 +385,18 @@ class BookingsController extends AppController
                 ->withStringBody(json_encode($payload));
         }
 
-        $booking = $this->Bookings->find()
+        $query = $this->Bookings->find()
             ->where($this->bookingScopeConditions())
-            ->where(['ticket' => $ticket])
+            ->where(['ticket' => $ticket]);
+
+        // Restrict the lookup to the active Mandant so a ticket that also exists
+        // under another Mandant can never pull in that Mandant's PSP.
+        $mandantId = $this->request->getQuery('mandant_id');
+        if ($mandantId !== null && $mandantId !== '' && ctype_digit((string)$mandantId)) {
+            $query->where(['Bookings.mandant_id' => (int)$mandantId]);
+        }
+
+        $booking = $query
             ->orderBy(['bookingdate' => 'DESC', 'id' => 'DESC'])
             ->first();
 
@@ -277,20 +439,16 @@ class BookingsController extends AppController
             ->where($this->bookingScopeConditions())
             ->where(['Bookings.id' => $id])
             ->firstOrFail();
-        $psps = $this->Bookings->find()
-            ->select([
-                'bookingpsp',
-                'mandanten' => $this->Bookings->query()->newExpr('CAST(GROUP_CONCAT(DISTINCT mandant_id) AS CHAR)'),
-            ])
-            ->where($this->bookingScopeConditions())
-            ->groupBy(['bookingpsp'])
-            ->all();
+        $psps = $this->pspOptions();
         $mandanten = $this->Bookings->Mandanten->find('list')->orderBy(['name' => 'ASC'])->all();
         if ($this->request->is(['patch', 'post', 'put'])) {
             $booking = $this->Bookings->patchEntity($booking, $this->request->getData());
             $booking->user_id = parent::currentUserId();
             $booking->group_id = $this->currentGroupId();
             if ($this->Bookings->save($booking)) {
+                if ($booking->mandant_id !== null) {
+                    $this->request->getSession()->write('Bookings.activeMandantId', (int)$booking->mandant_id);
+                }
                 $this->Flash->success(__('The booking has been saved.'));
 
                 return $this->redirect(['action' => 'index']);
@@ -363,12 +521,16 @@ class BookingsController extends AppController
 	$activeWorksheet->getStyle('A1:E1')->getBorders()->getBottom()->setBorderStyle(\PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN);
 		
 
-        $bookingDate = $this->Bookings->aliasField('bookingdate');
-        $dateConditions = function ($exp) use ($bookingDate, $year, $month) {
-            return $exp
-                ->eq("YEAR($bookingDate)", $year)
-                ->eq("MONTH($bookingDate)", $month);
-        };
+        // Bereichsfilter statt YEAR()/MONTH() — datenbank-portabel und nutzt
+        // einen Index auf bookingdate. Dasselbe Muster wie in
+        // TimesheetPdfService, damit Excel- und PDF-Export denselben Monat
+        // auf dieselbe Weise abgrenzen.
+        $firstOfMonth = Date::create($year, $month, 1);
+        $lastOfMonth = $firstOfMonth->lastOfMonth();
+        $dateConditions = [
+            'Bookings.bookingdate >=' => $firstOfMonth->format('Y-m-d'),
+            'Bookings.bookingdate <=' => $lastOfMonth->format('Y-m-d'),
+        ];
 
 	$results = $this->Bookings->find()
              ->where($this->bookingScopeConditions())
@@ -477,99 +639,119 @@ class BookingsController extends AppController
             ->where(['id' => $userId])->first() : null;
         $username = trim(($userRecord?->first_name ?? '') . ' ' . ($userRecord?->last_name ?? ''))
             ?: ($userRecord?->username ?? '');
-        $monthLabel = Date::create($year, $month, 1)->i18nFormat('MMMM yyyy');
-        $title = "timesheet {$username} {$monthLabel}";
-        if ($mandantName !== null) {
-            $title .= " — {$mandantName}";
-        }
-
-        $bookingDate = $this->Bookings->aliasField('bookingdate');
-        $dateConditions = function ($exp) use ($bookingDate, $year, $month) {
-            return $exp
-                ->eq("YEAR($bookingDate)", $year)
-                ->eq("MONTH($bookingDate)", $month);
-        };
-
-        $results = $this->Bookings->find()
-            ->where($this->bookingScopeConditions())
-            ->where($dateConditions)
-            ->where($mandantConditions)
-            ->orderBy(['bookingdate' => 'ASC'])
-            ->toArray();
-
-        $pspResults = $this->Bookings->find()
-            ->where($this->bookingScopeConditions())
-            ->where($dateConditions)
-            ->where($mandantConditions)
-            ->select(['bookingpsp', 'minutes' => $this->Bookings->query()->func()->sum('minutes')])
-            ->groupBy(['bookingpsp'])
-            ->orderBy(['bookingpsp' => 'ASC'])
-            ->toArray();
-
-        $totalMinutes = array_sum(array_map(fn($r) => $r->minutes, $pspResults));
-
-        $html = '
-        <style>
-            body { font-family: sans-serif; font-size: 9pt; }
-            table { width: 100%; border-collapse: collapse; }
-            th { background: #ddd; font-weight: bold; padding: 3px 6px; border-bottom: 2px solid #999; text-align: left; }
-            td { padding: 2px 6px; vertical-align: top; border-bottom: 1px solid #eee; }
-            .right { text-align: right; }
-            .summary { width: 50%; margin-top: 24px; }
-            .total td { font-weight: bold; border-top: 2px solid #666; border-bottom: none; }
-        </style>';
-
-        $html .= '<table>';
-        $html .= '<thead><tr><th>Date</th><th>Ticket</th><th>PSP</th><th>Description</th><th class="right">Minutes</th></tr></thead><tbody>';
-        foreach ($results as $row) {
-            $html .= '<tr>'
-                . '<td>' . h($row->bookingdate->i18nFormat('dd.MM.yyyy')) . '</td>'
-                . '<td>' . h(trim($row->ticket)) . '</td>'
-                . '<td>' . h(trim($row->bookingpsp)) . '</td>'
-                . '<td>' . h(trim($row->description)) . '</td>'
-                . '<td class="right">' . $row->minutes . '</td>'
-                . '</tr>';
-        }
-        $html .= '</tbody></table>';
-
-        $html .= '<table class="summary">';
-        $html .= '<thead><tr><th>Booking PSP</th><th class="right">Minutes</th><th class="right">Hours</th></tr></thead><tbody>';
-        foreach ($pspResults as $row) {
-            $html .= '<tr>'
-                . '<td>' . h($row->bookingpsp) . '</td>'
-                . '<td class="right">' . $row->minutes . '</td>'
-                . '<td class="right">' . round($row->minutes / 60, 2) . '</td>'
-                . '</tr>';
-        }
-        $html .= '<tr class="total">'
-            . '<td>Total</td>'
-            . '<td class="right">' . $totalMinutes . '</td>'
-            . '<td class="right">' . round($totalMinutes / 60, 2) . '</td>'
-            . '</tr>';
-        $html .= '</tbody></table>';
-
-        $mpdf = new Mpdf([
-            'orientation' => 'L',
-            'margin_top'    => 22,
-            'margin_bottom' => 15,
-        ]);
-
-        $mpdf->SetHTMLHeader(
-            '<div style="text-align:center;font-weight:bold;font-size:11pt;">' . h($title) . '</div>'
+        // Gemeinsame PDF-Erzeugung (auch von der REST-API genutzt).
+        $pdf = (new TimesheetPdfService())->render(
+            $year,
+            $month,
+            $this->bookingScopeConditions(),
+            $mandantId,
+            $username,
+            $mandantName
         );
-        $mpdf->SetHTMLFooter(
-            '<div style="text-align:center;font-size:9pt;">- {PAGENO} -</div>'
-        );
-
-        $mpdf->WriteHTML($html);
 
         $filename = $this->exportFilename('pdf', $mandantName, $year, $month);
         $this->response = $this->response
             ->withHeader('Content-Type', 'application/pdf')
             ->withHeader('Content-Disposition', 'attachment; filename="' . $filename . '"')
-            ->withStringBody($mpdf->Output('', 'S'));
+            ->withStringBody($pdf);
 
         return $this->response;
     }
 
+    /**
+     * Approval-PDF (z. B. die "Approved"-Mail des Kunden) für einen Monat
+     * über die Weboberfläche hochladen. Session-Auth; speichert je
+     * User/Mandant/Monat genau einen Datensatz (Upsert) als BLOB.
+     */
+    public function uploadApproval($year, $month)
+    {
+        $this->request->allowMethod(['post']);
+        $year = filter_var($year, FILTER_VALIDATE_INT, ['options' => ['min_range' => 2000, 'max_range' => 2100]]);
+        $month = filter_var($month, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1, 'max_range' => 12]]);
+        if ($year === false || $month === false) {
+            throw new BadRequestException('Invalid period.');
+        }
+
+        $userId = $this->currentUserId();
+        if ($userId === null) {
+            throw new BadRequestException('No user in session.');
+        }
+        $mandantId = $this->queryMandantId();
+
+        $file = $this->request->getUploadedFile('approval');
+        if ($file === null || $file->getError() !== UPLOAD_ERR_OK) {
+            $this->Flash->error('Bitte eine PDF-Datei auswählen.');
+
+            return $this->redirect($this->referer(['action' => 'index']));
+        }
+        $content = (string)$file->getStream()->getContents();
+        if (strncmp($content, '%PDF-', 5) !== 0) {
+            $this->Flash->error('Nur PDF-Dateien werden akzeptiert.');
+
+            return $this->redirect($this->referer(['action' => 'index']));
+        }
+        if (strlen($content) > 16 * 1024 * 1024) {
+            $this->Flash->error('Datei zu groß (max. 16 MB).');
+
+            return $this->redirect($this->referer(['action' => 'index']));
+        }
+        $filename = (string)($file->getClientFilename() ?: 'approval.pdf');
+        if (!preg_match('/\.pdf$/i', $filename)) {
+            $filename .= '.pdf';
+        }
+
+        $Approvals = $this->fetchTable('Approvals');
+        $existing = $Approvals->findForPeriod($userId, $mandantId, $year, $month)->first();
+        $approval = $existing ?? $Approvals->newEmptyEntity();
+        $approval = $Approvals->patchEntity($approval, [
+            'user_id' => $userId,
+            'mandant_id' => $mandantId,
+            'year' => $year,
+            'month' => $month,
+            'filename' => $filename,
+            'mime' => 'application/pdf',
+            'content' => $content,
+            'byte_size' => strlen($content),
+            'uploaded_by' => (string)($this->currentUser()['email'] ?? 'web'),
+        ]);
+
+        if ($Approvals->save($approval)) {
+            $this->Flash->success('Approval gespeichert.');
+        } else {
+            $this->Flash->error('Approval konnte nicht gespeichert werden.');
+        }
+
+        return $this->redirect($this->referer(['action' => 'index']));
+    }
+
+    /**
+     * Gespeichertes Approval-PDF eines Monats herunterladen (Session-Auth).
+     */
+    public function downloadApproval($year, $month)
+    {
+        $year = filter_var($year, FILTER_VALIDATE_INT, ['options' => ['min_range' => 2000, 'max_range' => 2100]]);
+        $month = filter_var($month, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1, 'max_range' => 12]]);
+        if ($year === false || $month === false) {
+            throw new BadRequestException('Invalid period.');
+        }
+        $userId = $this->currentUserId();
+        if ($userId === null) {
+            throw new BadRequestException('No user in session.');
+        }
+        $mandantId = $this->queryMandantId();
+
+        $approval = $this->fetchTable('Approvals')
+            ->findForPeriod($userId, $mandantId, $year, $month)
+            ->select(['filename', 'mime', 'content'])
+            ->first();
+        if ($approval === null) {
+            throw new NotFoundException('Kein Approval für diesen Monat gespeichert.');
+        }
+
+        // BLOB kommt beim Lesen als Stream-Resource zurück → in String wandeln.
+        return $this->response
+            ->withType($approval->mime ?: 'application/pdf')
+            ->withHeader('Content-Disposition', 'attachment; filename="' . $approval->filename . '"')
+            ->withStringBody(\App\Controller\ApiController::binaryToString($approval->content));
+    }
 }

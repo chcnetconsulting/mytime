@@ -1,0 +1,65 @@
+# Einmaliger Import der Nutzdaten aus dem alten MySQL nach pgsql92.
+#
+# Reihenfolge beim Cutover:
+#   1. kubectl -n mytime scale deploy/mytime --replicas=0
+#   2. letzter mysqldump, auf die Storage Box sichern
+#   3. Migration-Job (06) → leeres Schema in pgsql92
+#   4. DIESER Job → Daten
+#   5. Deployment (04) wieder hoch
+#
+# Setzt voraus, dass mysql-0 noch laeuft: das Kommando liest die alte und
+# schreibt die neue Datenbank im selben Prozess. Deshalb wird mysql-0 erst
+# NACH der Fachpruefung auf replicas=0 gefahren.
+#
+# Nach dem Cutover ersatzlos loeschen (zusammen mit
+# src/Command/ImportMysqlCommand.php und den MYSQL_*-Werten im Secret).
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: mytime-import
+  namespace: mytime
+  labels:
+    app.kubernetes.io/name: mytime
+    app.kubernetes.io/component: import
+spec:
+  # Kein zweiter Versuch: der erste Lauf laeuft in EINER Transaktion und
+  # macht bei einem Fehler alles rueckgaengig. Ein automatischer Neustart
+  # brächte nur die Gefahr, auf halb gefuellte Tabellen zu treffen — das
+  # Kommando bricht dann ohnehin ab, aber der Job sähe nach "läuft noch" aus.
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: mytime
+        app.kubernetes.io/component: import
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: import
+          image: localhost:32000/mytime:2.2.0
+          imagePullPolicy: IfNotPresent
+          command:
+            - sh
+            - -c
+            - bin/cake import_mysql --confirm && bin/cake schema_cache clear
+          envFrom:
+            # DB_* (Ziel)
+            - configMapRef:
+                name: mytime-config
+            # MYSQL_* (Quelle) — liegen bis zum Abbau von mysql-0 hier drin
+            - secretRef:
+                name: mytime-secret
+            # DB_PASSWORD (Ziel)
+            - secretRef:
+                name: mytime-db
+          volumeMounts:
+            - name: tmp
+              mountPath: /var/www/html/tmp
+            - name: logs
+              mountPath: /var/www/html/logs
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: logs
+          emptyDir: {}

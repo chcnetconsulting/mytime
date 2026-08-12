@@ -19,21 +19,36 @@ In Produktion sollte `DEBUG=false` gesetzt sein.
 
 ## Datenbank
 
-Die Standard-Datasource nutzt bevorzugt einzelne MySQL-Variablen:
+Die Datenbank ist **PostgreSQL**. Die Standard-Datasource nutzt bevorzugt
+einzelne Variablen:
 
 ```bash
-MYSQL_HOST="127.0.0.1"
-MYSQL_USER="mytime"
-MYSQL_PASS="<password>"
-MYSQL_DB="mytime"
+DB_HOST="127.0.0.1"
+DB_PORT="5432"
+DB_USERNAME="mytime"
+DB_PASSWORD="<password>"
+DB_DATABASE="mytime"
+DB_SCHEMA="public"
+DB_SSL="0"
+DB_SSLMODE="prefer"
 DATABASE_QUOTE_IDENTIFIERS="true"
 DATABASE_URL=""
 ```
 
-`DATABASE_URL` kann alternativ verwendet werden. Wenn beide Wege genutzt werden,
-hat die URL in CakePHP Vorrang. Fuer die aktuelle MySQL-Struktur ist
-`DATABASE_QUOTE_IDENTIFIERS=true` sinnvoll, weil `groups` ein reserviertes Wort
-sein kann.
+`DATABASE_URL` (`postgres://…`) kann alternativ verwendet werden und hat in
+CakePHP Vorrang, wenn beide Wege gesetzt sind.
+
+`DATABASE_QUOTE_IDENTIFIERS=true` bleibt sinnvoll: `groups` ist auch in
+PostgreSQL kein unproblematischer Name.
+
+⚠ **Im Cluster ist `DB_SSL=1` und `DB_SSLMODE=require` Pflicht** — Spilo
+(der Zalando-Operator) lehnt unverschlüsselte TCP-Verbindungen in `pg_hba.conf`
+ausdrücklich ab. Bewusst `require` und nicht `verify-ca`/`verify-full`: das
+Serverzertifikat ist selbstsigniert und wird bei jedem Start neu erzeugt.
+
+Die Zeichenkodierung ist fest `utf8` und **nicht** konfigurierbar — `utf8mb4`
+würde PostgreSQL beim `SET NAMES` mit *invalid value for parameter
+"client_encoding"* abweisen.
 
 ## Auth lokal deaktivieren
 

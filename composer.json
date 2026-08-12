@@ -56,6 +56,9 @@
         "allow-plugins": {
             "cakephp/plugin-installer": true,
             "dealerdirect/phpcodesniffer-composer-installer": true
+        },
+        "platform": {
+            "php": "8.3.0"
         }
     }
 }

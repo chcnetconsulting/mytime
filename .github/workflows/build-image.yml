@@ -1,0 +1,103 @@
+# Baut das Produktions-Image und legt es in der eigenen Cluster-Registry ab.
+#
+# Warum überhaupt in der CI und nicht lokal: die Cluster-Knoten sind amd64,
+# Entwicklungsrechner mit Apple Silicon sind es nicht. Ein Kreuz-Build braucht
+# buildx samt Emulation; ein GitHub-Runner ist von Haus aus amd64 und damit
+# schneller und verlässlicher.
+#
+# ── Einmalige Einrichtung ────────────────────────────────────────────────────
+#
+# 1. Eigener Registry-Benutzer für dieses Projekt (Regel: ein Benutzer je
+#    Projekt, damit ein Widerruf nie mehr als ein Repository trifft; `chcnet`
+#    gehört ausschließlich myspots):
+#
+#      export KUBECONFIG=~/dev/hetznerk8sconfig
+#      kubectl -n container-registry get secret registry-htpasswd \
+#        -o jsonpath='{.data.users}' | base64 -d > users
+#      docker run --rm httpd:2 htpasswd -nbB mytime 'NEUES-PASSWORT' >> users
+#      kubectl -n container-registry create secret generic registry-htpasswd \
+#        --from-file=users=users --dry-run=client -o yaml | kubectl apply -f -
+#      rm users
+#
+#    Danach BEIDE prüfen — den neuen Benutzer und `chcnet`:
+#      curl -u 'mytime:PW' https://registry.chcnetconsulting.com/v2/_catalog   # 200
+#
+# 2. Passwort als Repository-Secret `REGISTRY_PASSWORD` hinterlegen.
+#    Der Benutzername ist kein Geheimnis und steht unten als `env`.
+#
+# ── Ausrollen ───────────────────────────────────────────────────────────────
+#
+# Der Workflow deployt bewusst NICHT. Nach dem Lauf von Hand:
+#
+#   kubectl -n mytime set image deploy/mytime php-fpm=localhost:32000/mytime:<tag> \
+#                                             app-copy=localhost:32000/mytime:<tag>
+#
+# Grund: die Cluster-API ist nicht öffentlich erreichbar, und ein Deploy-Schritt
+# bräuchte dauerhafte Cluster-Zugangsdaten im Repository.
+---
+name: Build image
+
+on:
+  # Jeder Pull Request baut und pusht ein eigenes Image. So sieht man am PR, ob
+  # der Build durchläuft, bevor gemerged wird — das Ausrollen nach k8s passiert
+  # erst nach dem Merge, von Hand.
+  pull_request:
+    branches:
+      - main
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Image-Tag, z. B. 2.2.0'
+        required: true
+
+permissions:
+  contents: read
+
+env:
+  REGISTRY: registry.chcnetconsulting.com
+  # Kein Geheimnis — der zugehörige Zugang ist auf dieses eine Projekt begrenzt.
+  REGISTRY_USER: mytime
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      # PR-Images bekommen bewusst ein eigenes Namensschema (`pr-<nummer>`), damit
+      # ein Testbau niemals einen Release-Tag in der Registry überschreibt.
+      - name: Tag bestimmen
+        id: meta
+        run: |
+          if [ -n "${{ inputs.tag }}" ]; then
+            echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+          elif [ -n "${{ github.event.pull_request.number }}" ]; then
+            echo "tag=pr-${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: An der Registry anmelden
+        run: |
+          echo "${{ secrets.REGISTRY_PASSWORD }}" \
+            | docker login "$REGISTRY" -u "$REGISTRY_USER" --password-stdin
+
+      # Der Runner ist amd64, deshalb kein buildx und keine Emulation nötig.
+      - name: Bauen
+        run: |
+          docker build --platform linux/amd64 \
+            -t "$REGISTRY/mytime:${{ steps.meta.outputs.tag }}" .
+
+      # Beweisen, dass der PostgreSQL-Treiber im fertigen Image wirklich lädt.
+      # Ein fehlendes libpq fällt sonst erst auf, wenn php-fpm im Cluster mit
+      # "Unable to load dynamic library pdo_pgsql" nicht startet.
+      - name: pdo_pgsql prüfen
+        run: |
+          docker run --rm "$REGISTRY/mytime:${{ steps.meta.outputs.tag }}" \
+            php -r 'exit(in_array("pgsql", PDO::getAvailableDrivers()) ? 0 : 1);'
+
+      - name: Pushen
+        run: docker push "$REGISTRY/mytime:${{ steps.meta.outputs.tag }}"

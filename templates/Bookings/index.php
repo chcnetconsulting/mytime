@@ -2,8 +2,22 @@
 /**
  * @var \App\View\AppView $this
  * @var iterable<\App\Model\Entity\Booking> $bookings
+ * @var array{year:int,month:int,label:string,psps:array<int,array{bookingpsp:string,minutes:int}>,totalMinutes:int} $monthSummary
  */
+$hours = static fn(int $minutes): string => number_format($minutes / 60, 2, ',', '.');
 ?>
+<style>
+.month-summary {
+    border: 1px solid #ccc; border-radius: 4px; padding: 8px 12px;
+    margin: 0 0 16px 0; display: inline-block; min-width: 320px;
+}
+.month-summary h4 { margin: 0 0 6px 0; font-size: 1em; }
+.month-summary table { border-collapse: collapse; margin: 0; width: 100%; }
+.month-summary td { padding: 2px 12px 2px 0; font-size: 0.9em; border: none; }
+.month-summary td.right { text-align: right; padding-right: 0; }
+.month-summary tr.total td { font-weight: bold; border-top: 1px solid #999; padding-top: 4px; }
+.month-summary .empty { font-size: 0.9em; color: #666; }
+</style>
 <div class="bookings index content">
     <?= $this->Html->link(__('New Booking'), ['action' => 'add'], ['class' => 'button float-right']) ?>
     <h3><?= __('Bookings') ?></h3>
@@ -33,6 +47,36 @@
                  </form>
 
 	</div>
+
+	<div class="month-summary">
+	    <h4>
+	        Stunden <?= h($monthSummary['label']) ?>
+	        <?php if ($selectedMandantId !== null): ?>
+	            &ndash; <?= h((string)$mandanten[$selectedMandantId]) ?>
+	        <?php else: ?>
+	            &ndash; alle Mandanten
+	        <?php endif; ?>
+	    </h4>
+	    <?php if ($monthSummary['psps'] === []): ?>
+	        <p class="empty">Keine Buchungen in diesem Monat.</p>
+	    <?php else: ?>
+	    <table>
+	        <?php foreach ($monthSummary['psps'] as $psp): ?>
+	        <tr>
+	            <td><?= h($psp['bookingpsp']) ?></td>
+	            <td class="right"><?= $this->Number->format($psp['minutes']) ?> min</td>
+	            <td class="right"><?= $hours($psp['minutes']) ?> h</td>
+	        </tr>
+	        <?php endforeach; ?>
+	        <tr class="total">
+	            <td>Total</td>
+	            <td class="right"><?= $this->Number->format($monthSummary['totalMinutes']) ?> min</td>
+	            <td class="right"><?= $hours($monthSummary['totalMinutes']) ?> h</td>
+	        </tr>
+	    </table>
+	    <?php endif; ?>
+	</div>
+
         <table>
             <thead>
                 <tr>

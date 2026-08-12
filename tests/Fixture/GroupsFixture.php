@@ -3,9 +3,7 @@ declare(strict_types=1);
 
 namespace App\Test\Fixture;
 
-use Cake\TestSuite\Fixture\TestFixture;
-
-class GroupsFixture extends TestFixture
+class GroupsFixture extends AppFixture
 {
     public function init(): void
     {

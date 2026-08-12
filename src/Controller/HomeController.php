@@ -112,6 +112,23 @@ class HomeController extends AppController
 
         $bookings = array_values($monthly);
 
+        // Zu jedem Monat merken, ob bereits ein Approval-PDF hinterlegt ist
+        // (steuert Download-Link bzw. Upload-Feld in der Ansicht).
+        $userId = $this->currentUserId();
+        $approvalMap = [];
+        if ($userId !== null) {
+            $found = $this->fetchTable('Approvals')->find()
+                ->select(['year', 'month', 'filename'])
+                ->where(['user_id' => $userId, 'mandant_id IS' => $selectedMandantId])
+                ->all();
+            foreach ($found as $a) {
+                $approvalMap[sprintf('%04d-%d', $a->year, $a->month)] = $a->filename;
+            }
+        }
+        foreach ($bookings as $b) {
+            $b->approval = $approvalMap[sprintf('%04d-%d', $b->year, $b->month)] ?? null;
+        }
+
         $this->set(compact('bookings', 'mandanten', 'selectedMandantId'));
     }
 }

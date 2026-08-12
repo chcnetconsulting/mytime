@@ -2,7 +2,7 @@
 
 use Cake\Cache\Engine\FileEngine;
 use Cake\Database\Connection;
-use Cake\Database\Driver\Mysql;
+use Cake\Database\Driver\Postgres;
 use Cake\Log\Engine\FileLog;
 use Cake\Mailer\Transport\MailTransport;
 
@@ -17,6 +17,16 @@ return [
      * true: Errors and warnings shown.
      */
     'debug' => filter_var(env('DEBUG', false), FILTER_VALIDATE_BOOLEAN),
+
+    /*
+     * MyTime-spezifische Einstellungen.
+     * - apiToken: Bearer-Token für die REST-API (/api/*). Ist er leer, ist die
+     *   API komplett deaktiviert (liefert 404). Nie ins Repo committen — nur
+     *   über MYTIME_API_TOKEN (env/Secret) setzen.
+     */
+    'Mytime' => [
+        'apiToken' => env('MYTIME_API_TOKEN', ''),
+    ],
 
     /*
      * Configure basic information about the application.
@@ -280,20 +290,27 @@ return [
          */
         'default' => [
             'className' => Connection::class,
-            'driver' => Mysql::class,
+            'driver' => Postgres::class,
+
+            /*
+             * Ausdruecklich false, obwohl der Postgres-Treiber intern true
+             * voreinstellt: pgsql92 ist ein gemeinsamer Cluster mit
+             * max_connections = 100 fuer alle Anwendungen. Dauerverbindungen
+             * je php-fpm-Arbeiter mal zwei Repliken waeren dort ein
+             * unnoetiger Dauerverbrauch.
+             */
             'persistent' => false,
             'timezone' => 'UTC',
 
             /*
-             * For MariaDB/MySQL the internal default changed from utf8 to utf8mb4, aka full utf-8 support, in CakePHP 3.6
+             * 'utf8' — NICHT 'utf8mb4'. Der Postgres-Treiber setzt daraus
+             * SET NAMES '<wert>' ab; 'utf8mb4' kennt PostgreSQL nicht und
+             * quittiert es mit "invalid value for parameter client_encoding".
+             * Die MySQL-Unterscheidung utf8/utf8mb4 entfaellt hier ohnehin,
+             * PostgreSQLs UTF8 deckt den vollen Zeichenvorrat ab.
              */
-            //'encoding' => 'utf8mb4',
+            'encoding' => 'utf8',
 
-            /*
-             * If your MySQL server is configured with `skip-character-set-client-handshake`
-             * then you MUST use the `flags` config to set your charset encoding.
-             * For e.g. `'flags' => [\PDO::MYSQL_ATTR_INIT_COMMAND => 'SET NAMES utf8mb4']`
-             */
             'flags' => [],
             'cacheMetadata' => true,
             'log' => false,
@@ -307,31 +324,26 @@ return [
              * manipulated before being executed.
              */
             'quoteIdentifiers' => false,
-
-            /*
-             * During development, if using MySQL < 5.6, uncommenting the
-             * following line could boost the speed at which schema metadata is
-             * fetched from the database. It can also be set directly with the
-             * mysql configuration directive 'innodb_stats_on_metadata = 0'
-             * which is the recommended value in production environments
-             */
-            //'init' => ['SET GLOBAL innodb_stats_on_metadata = 0'],
         ],
 
         /*
          * The test connection is used during the test suite.
+         *
+         * Der Treiber steht hier nur als Rueckfallwert. Die Testverbindung
+         * kommt normalerweise ueber DATABASE_TEST_URL aus app_local.php und
+         * bringt ihren Treiber im Schema der Adresse mit — ohne gesetzte
+         * Umgebung ist das sqlite://, siehe docs/testing.md.
          */
         'test' => [
             'className' => Connection::class,
-            'driver' => Mysql::class,
+            'driver' => Postgres::class,
             'persistent' => false,
             'timezone' => 'UTC',
-            //'encoding' => 'utf8mb4',
+            'encoding' => 'utf8',
             'flags' => [],
             'cacheMetadata' => true,
             'quoteIdentifiers' => false,
             'log' => false,
-            //'init' => ['SET GLOBAL innodb_stats_on_metadata = 0'],
         ],
     ],
 

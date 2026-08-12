@@ -1,5 +1,12 @@
 FROM php:8.3-fpm-alpine AS php-base
 
+# libpq ist die Laufzeitbibliothek hinter pdo_pgsql und MUSS im Image bleiben —
+# ohne sie startet php-fpm mit "Unable to load dynamic library pdo_pgsql".
+# libpq-dev braucht nur der Build und wandert deshalb in .build-deps.
+#
+# mysql-client und pdo_mysql bleiben nur bis zum Abbau von mysql-0: das
+# einmalige Import-Kommando (bin/cake import_mysql) spricht beide Datenbanken
+# im selben Prozess an. Danach fallen sie mit Image 2.2.1 weg.
 RUN apk add --no-cache \
         bash \
         icu-dev \
@@ -8,13 +15,16 @@ RUN apk add --no-cache \
         libpng-dev \
         libjpeg-turbo-dev \
         freetype-dev \
+        libpq \
+        postgresql-client \
         mysql-client \
         linux-headers \
-    && apk add --no-cache --virtual .build-deps $PHPIZE_DEPS \
+    && apk add --no-cache --virtual .build-deps $PHPIZE_DEPS libpq-dev \
     && docker-php-ext-configure gd --with-freetype --with-jpeg \
     && docker-php-ext-install -j"$(nproc)" \
         intl \
         mbstring \
+        pdo_pgsql \
         pdo_mysql \
         zip \
         gd \

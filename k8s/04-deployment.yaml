@@ -20,7 +20,7 @@ spec:
         fsGroupChangePolicy: OnRootMismatch
       initContainers:
         - name: app-copy
-          image: chcnetconsulting/mytime:2.0.9
+          image: localhost:32000/mytime:2.3.0
           imagePullPolicy: IfNotPresent
           securityContext:
             runAsUser: 0
@@ -37,7 +37,7 @@ spec:
               mountPath: /logs-cake
       containers:
         - name: php-fpm
-          image: chcnetconsulting/mytime:2.0.9
+          image: localhost:32000/mytime:2.3.0
           imagePullPolicy: IfNotPresent
           ports:
             - name: fpm
@@ -47,6 +47,9 @@ spec:
                 name: mytime-config
             - secretRef:
                 name: mytime-secret
+            # Passwort fuer pgsql92, aus dem Operator-Secret kopiert (11-db-secret.example.yaml).
+            - secretRef:
+                name: mytime-db
           volumeMounts:
             - name: app
               mountPath: /var/www/html
