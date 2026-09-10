@@ -106,4 +106,22 @@ class UsersTableTest extends TestCase
         $this->assertFalse($this->Users->save($duplicateEmail));
         $this->assertNotEmpty($duplicateEmail->getError('email'));
     }
+
+    /**
+     * Die Gruppe bestimmt, wessen Approvals ein Benutzer sieht: alle Mitglieder
+     * einschliesslich ihm selbst, niemand aus einer fremden Gruppe.
+     */
+    public function testGroupMemberIds(): void
+    {
+        $this->assertEqualsCanonicalizing([1, 2], $this->Users->groupMemberIds(2));
+        $this->assertSame([3], $this->Users->groupMemberIds(3));
+    }
+
+    /**
+     * Ein unbekannter Benutzer sieht nur, was unter seiner eigenen Id liegt.
+     */
+    public function testGroupMemberIdsWithoutUserFallsBackToOwnId(): void
+    {
+        $this->assertSame([99], $this->Users->groupMemberIds(99));
+    }
 }

@@ -25,6 +25,7 @@ class HomeControllerTest extends TestCase
         'app.Users',
         'app.Mandanten',
         'app.Bookings',
+        'app.Approvals',
     ];
 
     /**
@@ -57,5 +58,60 @@ class HomeControllerTest extends TestCase
         // Buchung 3 gehoert einem anderen Nutzer in einer anderen Gruppe —
         // ihr August darf hier nicht auftauchen.
         $this->assertResponseNotContains('/bookings/genxls/2025/8');
+    }
+
+    /**
+     * Zwei Konten derselben Gruppe sehen dieselben Buchungen — und damit auch
+     * dieselben Approvals, egal mit welchem Konto sie hochgeladen wurden.
+     */
+    public function testGroupMembersSeeEachOthersApprovals(): void
+    {
+        $this->storeApproval(1, 2025, 9);
+        $this->loginAs(2, 'second@example.com');
+
+        $this->get('/home');
+
+        $this->assertResponseOk();
+        $this->assertResponseContains('/bookings/download-approval/2025/9');
+    }
+
+    /**
+     * Die Gruppe ist zugleich die Grenze: ein Approval aus einer fremden Gruppe
+     * bleibt unsichtbar, auch wenn der Monat in der eigenen Liste steht.
+     */
+    public function testApprovalsOfOtherGroupsStayHidden(): void
+    {
+        $this->storeApproval(1, 2025, 8);
+        $this->loginAs(3, 'third@example.com');
+
+        $this->get('/home');
+
+        $this->assertResponseOk();
+        $this->assertResponseContains('/bookings/genxls/2025/8');
+        $this->assertResponseNotContains('/bookings/download-approval/2025/8');
+    }
+
+    private function loginAs(int $userId, string $email): void
+    {
+        $this->session(['Auth' => ['User' => ['id' => $userId, 'email' => $email]]]);
+    }
+
+    /**
+     * Legt ein Approval ohne Mandant an, wie es der Upload unter "Alle
+     * Mandanten" tut.
+     */
+    private function storeApproval(int $userId, int $year, int $month): void
+    {
+        $approvals = $this->getTableLocator()->get('Approvals');
+        $approvals->saveOrFail($approvals->newEntity([
+            'user_id' => $userId,
+            'mandant_id' => null,
+            'year' => $year,
+            'month' => $month,
+            'filename' => 'approval.pdf',
+            'mime' => 'application/pdf',
+            'content' => '%PDF-1.7 test',
+            'byte_size' => 13,
+        ]));
     }
 }

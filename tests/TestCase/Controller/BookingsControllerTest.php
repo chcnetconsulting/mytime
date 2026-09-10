@@ -6,6 +6,8 @@ namespace App\Test\TestCase\Controller;
 use Cake\I18n\Date;
 use Cake\TestSuite\IntegrationTestTrait;
 use Cake\TestSuite\TestCase;
+use Laminas\Diactoros\Stream;
+use Laminas\Diactoros\UploadedFile;
 
 /**
  * App\Controller\BookingsController Test Case
@@ -26,6 +28,7 @@ class BookingsControllerTest extends TestCase
         'app.Users',
         'app.Mandanten',
         'app.Bookings',
+        'app.Approvals',
     ];
 
     protected function setUp(): void
@@ -338,5 +341,88 @@ class BookingsControllerTest extends TestCase
         $this->get('/bookings/genxls/2025/13');
 
         $this->assertResponseCode(400);
+    }
+
+    /**
+     * Zwei Konten derselben Gruppe teilen sich die Approvals: was das eine
+     * hochgeladen hat, laedt das andere herunter.
+     */
+    public function testGroupMemberCanDownloadApproval(): void
+    {
+        $this->storeApproval(1, '%PDF-1.7 von Konto 1');
+        $this->loginAs(2, 'second@example.com');
+
+        $this->get('/bookings/download-approval/2025/9');
+
+        $this->assertResponseOk();
+        $this->assertResponseEquals('%PDF-1.7 von Konto 1');
+    }
+
+    public function testOtherGroupCannotDownloadApproval(): void
+    {
+        $this->storeApproval(1, '%PDF-1.7 von Konto 1');
+        $this->loginAs(3, 'third@example.com');
+
+        $this->get('/bookings/download-approval/2025/9');
+
+        $this->assertResponseCode(404);
+    }
+
+    /**
+     * Ein Upload ersetzt das Approval eines Gruppenmitglieds, statt ein
+     * zweites fuer denselben Monat anzulegen — und der Datensatz behaelt
+     * seinen Besitzer.
+     */
+    public function testUploadReplacesApprovalOfGroupMember(): void
+    {
+        $this->storeApproval(1, '%PDF-1.7 alt');
+        $this->loginAs(2, 'second@example.com');
+
+        $content = '%PDF-1.7 neu';
+        $stream = new Stream('php://memory', 'wb+');
+        $stream->write($content);
+        $stream->rewind();
+        $this->configRequest([
+            'files' => [
+                'approval' => new UploadedFile($stream, strlen($content), UPLOAD_ERR_OK, 'neu.pdf', 'application/pdf'),
+            ],
+        ]);
+        $this->enableCsrfToken();
+
+        $this->post('/bookings/upload-approval/2025/9', []);
+
+        $this->assertRedirect();
+        $approvals = $this->getTableLocator()->get('Approvals')->find()
+            ->where(['year' => 2025, 'month' => 9])
+            ->all()
+            ->toList();
+        $this->assertCount(1, $approvals);
+        $this->assertSame(1, $approvals[0]->user_id);
+        $this->assertSame('neu.pdf', $approvals[0]->filename);
+        $this->assertSame('second@example.com', $approvals[0]->uploaded_by);
+    }
+
+    private function loginAs(int $userId, string $email): void
+    {
+        $this->session(['Auth' => ['User' => ['id' => $userId, 'email' => $email]]]);
+    }
+
+    /**
+     * Approval fuer September 2025 ohne Mandant, wie es der Upload unter
+     * "Alle Mandanten" anlegt.
+     */
+    private function storeApproval(int $userId, string $content): void
+    {
+        $approvals = $this->getTableLocator()->get('Approvals');
+        $approvals->saveOrFail($approvals->newEntity([
+            'user_id' => $userId,
+            'mandant_id' => null,
+            'year' => 2025,
+            'month' => 9,
+            'filename' => 'approval.pdf',
+            'mime' => 'application/pdf',
+            'content' => $content,
+            'byte_size' => strlen($content),
+        ]));
     }
 }

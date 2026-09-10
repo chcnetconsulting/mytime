@@ -59,11 +59,11 @@ class ApprovalsTableTest extends TestCase
         return is_resource($value) ? (string)stream_get_contents($value) : (string)$value;
     }
 
-    private function saveApproval(string $content, ?int $mandantId = 1): int
+    private function saveApproval(string $content, ?int $mandantId = 1, int $userId = 1): int
     {
         $approval = $this->Approvals->newEmptyEntity();
         $approval = $this->Approvals->patchEntity($approval, [
-            'user_id' => 1,
+            'user_id' => $userId,
             'mandant_id' => $mandantId,
             'year' => 2025,
             'month' => 9,
@@ -128,13 +128,28 @@ class ApprovalsTableTest extends TestCase
         $withMandant = $this->saveApproval('mit-mandant', 1);
         $withoutMandant = $this->saveApproval('ohne-mandant', null);
 
-        $found = $this->Approvals->findForPeriod(1, null, 2025, 9)->first();
+        $found = $this->Approvals->findForPeriod([1], null, 2025, 9)->first();
         $this->assertNotNull($found);
         $this->assertSame($withoutMandant, (int)$found->id);
 
-        $found = $this->Approvals->findForPeriod(1, 1, 2025, 9)->first();
+        $found = $this->Approvals->findForPeriod([1], 1, 2025, 9)->first();
         $this->assertNotNull($found);
         $this->assertSame($withMandant, (int)$found->id);
+    }
+
+    /**
+     * findForPeriod sucht ueber alle uebergebenen Benutzer — so sieht eine
+     * Gruppe das Approval, das eines ihrer Konten abgelegt hat.
+     */
+    public function testFindForPeriodCoversAllGivenUsers(): void
+    {
+        $id = $this->saveApproval('von-konto-2', 1, 2);
+
+        $found = $this->Approvals->findForPeriod([1, 2], 1, 2025, 9)->first();
+        $this->assertNotNull($found);
+        $this->assertSame($id, (int)$found->id);
+
+        $this->assertNull($this->Approvals->findForPeriod([3], 1, 2025, 9)->first());
     }
 
     /**

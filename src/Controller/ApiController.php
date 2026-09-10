@@ -161,15 +161,18 @@ class ApiController extends AppController
         [$year, $month] = $this->period($year, $month);
         [$mandantId] = $this->mandant();
         $owner = $this->owner();
+        $groupUserIds = $this->fetchTable('Users')->groupMemberIds((int)$owner->id);
         $Approvals = $this->fetchTable('Approvals');
 
         if ($this->request->is(['post', 'put'])) {
             [$content, $filename, $mime] = $this->readUpload();
 
-            $existing = $Approvals->findForPeriod((int)$owner->id, $mandantId, $year, $month)->first();
+            $existing = $Approvals->findForPeriod($groupUserIds, $mandantId, $year, $month)->first();
             $approval = $existing ?? $Approvals->newEmptyEntity();
             $approval = $Approvals->patchEntity($approval, [
-                'user_id' => (int)$owner->id,
+                // Wie beim Upload in der Weboberflaeche: ein ersetztes Approval
+                // behaelt seinen Besitzer.
+                'user_id' => $existing->user_id ?? (int)$owner->id,
                 'mandant_id' => $mandantId,
                 'year' => $year,
                 'month' => $month,
@@ -198,7 +201,7 @@ class ApiController extends AppController
         }
 
         // GET → Download
-        $approval = $Approvals->findForPeriod((int)$owner->id, $mandantId, $year, $month)
+        $approval = $Approvals->findForPeriod($groupUserIds, $mandantId, $year, $month)
             ->select(['filename', 'mime', 'content'])->first();
         if ($approval === null) {
             throw new NotFoundException('No approval stored for this period.');
@@ -224,14 +227,14 @@ class ApiController extends AppController
     }
 
     /**
-     * GET /api/approvals → JSON-Liste (ohne Dateiinhalt)
+     * GET /api/approvals → JSON-Liste (ohne Dateiinhalt) der Gruppe des Owners
      */
     public function approvals(): Response
     {
         $owner = $this->owner();
         $rows = $this->fetchTable('Approvals')->find()
             ->select(['id', 'mandant_id', 'year', 'month', 'filename', 'byte_size', 'uploaded_by', 'modified'])
-            ->where(['user_id' => (int)$owner->id])
+            ->where(['user_id IN' => $this->fetchTable('Users')->groupMemberIds((int)$owner->id)])
             ->orderBy(['year' => 'DESC', 'month' => 'DESC'])
             ->all()
             ->map(fn($r) => [

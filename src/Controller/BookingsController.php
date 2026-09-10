@@ -701,7 +701,7 @@ class BookingsController extends AppController
     /**
      * Approval-PDF (z. B. die "Approved"-Mail des Kunden) für einen Monat
      * über die Weboberfläche hochladen. Session-Auth; speichert je
-     * User/Mandant/Monat genau einen Datensatz (Upsert) als BLOB.
+     * Gruppe/Mandant/Monat genau einen Datensatz (Upsert) als BLOB.
      *
      * @param string|int|null $year Jahr aus der URL.
      * @param string|int|null $month Monat aus der URL.
@@ -745,10 +745,14 @@ class BookingsController extends AppController
         }
 
         $Approvals = $this->fetchTable('Approvals');
-        $existing = $Approvals->findForPeriod($userId, $mandantId, $year, $month)->first();
+        $groupUserIds = $this->fetchTable('Users')->groupMemberIds($userId);
+        $existing = $Approvals->findForPeriod($groupUserIds, $mandantId, $year, $month)->first();
         $approval = $existing ?? $Approvals->newEmptyEntity();
         $approval = $Approvals->patchEntity($approval, [
-            'user_id' => $userId,
+            // Ersetzt ein Gruppenmitglied ein vorhandenes Approval, behaelt es
+            // seinen Besitzer — sonst kollidiert es mit approvals_period_unique,
+            // falls der Hochladende fuer den Monat selbst noch eines hat.
+            'user_id' => $existing->user_id ?? $userId,
             'mandant_id' => $mandantId,
             'year' => $year,
             'month' => $month,
@@ -789,7 +793,7 @@ class BookingsController extends AppController
         $mandantId = $this->queryMandantId();
 
         $approval = $this->fetchTable('Approvals')
-            ->findForPeriod($userId, $mandantId, $year, $month)
+            ->findForPeriod($this->fetchTable('Users')->groupMemberIds($userId), $mandantId, $year, $month)
             ->select(['filename', 'mime', 'content'])
             ->first();
         if ($approval === null) {
