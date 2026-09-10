@@ -32,8 +32,13 @@ Optionaler Query-Parameter `mandant_id` grenzt überall auf einen Mandanten ein.
 | `GET` | `/api/approvals` | JSON-Liste aller hinterlegten Approvals (ohne Dateiinhalt) |
 
 Approvals werden als **BLOB in der Datenbank** gespeichert (die App hat im Cluster kein
-persistentes Dateivolume). Es gibt genau **ein** Approval je `(User, Mandant, Monat)`;
+persistentes Dateivolume). Es gibt genau **ein** Approval je `(Gruppe, Mandant, Monat)`;
 ein erneuter Upload ersetzt das vorhandene.
+
+Approvals gelten wie die Buchungen für die **ganze Gruppe**: was ein Konto hochlädt, sehen
+alle Konten derselben Gruppe — in der Weboberfläche wie über die API, die dabei für die
+Gruppe des Owner-Accounts spricht. So sieht jemand, der sich mit zwei Konten anmeldet
+(z. B. Firmen- und eigene Adresse), auf beiden dieselben Approvals.
 
 ## Beispiele
 

@@ -66,15 +66,25 @@ class ApprovalsTable extends Table
     }
 
     /**
-     * Genau ein Approval je (user, mandant, year, month) — Upsert-Helfer.
+     * Das Approval eines Monats fuer die angegebenen Benutzer — in der Regel
+     * alle Mitglieder einer Gruppe (UsersTable::groupMemberIds()), so wie bei
+     * den Buchungen. Upsert-Helfer.
+     *
+     * Aus der Zeit, als ein Approval nur seinem Benutzer gehoerte, kann eine
+     * Gruppe fuer denselben Monat noch mehrere haben; das zuletzt geaenderte
+     * kommt zuerst.
+     *
+     * @param list<int> $userIds
      */
-    public function findForPeriod(int $userId, ?int $mandantId, int $year, int $month): SelectQuery
+    public function findForPeriod(array $userIds, ?int $mandantId, int $year, int $month): SelectQuery
     {
-        return $this->find()->where([
-            'user_id' => $userId,
-            'mandant_id IS' => $mandantId,
-            'year' => $year,
-            'month' => $month,
-        ]);
+        return $this->find()
+            ->where([
+                'user_id IN' => $userIds,
+                'mandant_id IS' => $mandantId,
+                'year' => $year,
+                'month' => $month,
+            ])
+            ->orderBy(['modified' => 'DESC', 'id' => 'DESC']);
     }
 }

@@ -92,4 +92,33 @@ class UsersTable extends Table
 
         return $rules;
     }
+
+    /**
+     * Ids aller Benutzer, die mit dem angegebenen eine Gruppe teilen, ihn selbst
+     * eingeschlossen; ohne Gruppe nur er selbst. Das ist die Sichtbarkeit der
+     * Approvals — dieselbe Person kann mit mehreren Konten angemeldet sein.
+     *
+     * @return list<int>
+     */
+    public function groupMemberIds(int $userId): array
+    {
+        $groupId = $this->find()
+            ->select(['group_id'])
+            ->where(['id' => $userId])
+            ->all()
+            ->extract('group_id')
+            ->first();
+        if (empty($groupId)) {
+            return [$userId];
+        }
+
+        $ids = $this->find()
+            ->select(['id'])
+            ->where(['group_id' => $groupId])
+            ->all()
+            ->extract('id')
+            ->toList();
+
+        return array_values(array_map('intval', $ids));
+    }
 }
